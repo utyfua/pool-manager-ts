@@ -1,3 +1,4 @@
-export * from './parallelPromiseLoopV0'
+export * from './parallelPromiseLoop'
+export * from './parallelPromiseArrayLoop'
 export * from './PoolManager'
 export * from './retryUponError'

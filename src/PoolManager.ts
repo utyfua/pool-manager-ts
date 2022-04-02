@@ -1,6 +1,6 @@
 import EventEmitter from 'events'
 
-import { parallelPromiseLoopV0 } from './parallelPromiseLoopV0'
+import { parallelPromiseArrayLoop } from './parallelPromiseArrayLoop'
 import { retryUponError } from './retryUponError'
 
 export interface Pool {
@@ -20,9 +20,8 @@ export interface Task {
 export type IDistributeTasks = (pools: Pool[], tasks: Task[]) => [Pool, Task | undefined][] | null | undefined;
 
 export interface Options {
-    pools: Pool[],
+    pools?: Pool[],
     poolInitQueueSize: number,
-    poolInitRetryAttempts: number,
     distributeTasks?: IDistributeTasks,
     // taskAttempts?: number,
     taskQueueTimeout?: number,
@@ -44,22 +43,26 @@ export class PoolManager extends EventEmitter {
     constructor(protected options: Options) {
         super();
         this.distributeTasks = this.options.distributeTasks || defaultDistributeTasks
+        this.options.pools?.map(pool => this.addFreePool(pool))
     }
 
-    async init() {
-        await parallelPromiseLoopV0<Pool>({
-            iterateArray: this.options.pools,
+    async init({ pools, attempts, onerror }: { pools: Pool[], attempts: number | undefined, onerror?: (pool: Pool, error: Error | any) => void }) {
+        await parallelPromiseArrayLoop<Pool>({
+            iterateArray: pools,
             statement: async (pool: Pool): Promise<void> => {
                 try {
                     if (pool.init)
-                        await pool.init();
+                        await retryUponError({
+                            func: () => pool.init && pool.init(),
+                            attempts
+                        });
                     this.addFreePool(pool);
                 } catch (error) {
+                    onerror && onerror(pool, error)
                     this.failedPools.push([pool, error]);
                 }
             },
             maxThreads: this.options.poolInitQueueSize,
-            attempts: this.options.poolInitRetryAttempts,
         })
         if (!this.freePools.length && !this.runningTasks.length)
             throw new Error('No pools are available')

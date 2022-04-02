@@ -2,28 +2,19 @@
 
 import { retryUponError } from './retryUponError'
 
-export interface parallelPromiseLoopV0Options<Element, State> {
-    maxThreads: number,
-    initialization?: () => State,
-    condition?: (state: State) => boolean,
-    finalExpression?: (state: State) => State,
-    iterateArray?: Element[],
-    statement: (element: any, index?: number) => Promise<void>,
-    attempts: number
+export interface parallelPromiseLoopOptions<State> {
+    maxThreads?: number,
+    initialization: () => State,
+    condition: (state: State) => boolean,
+    finalExpression: (state: State) => State,
+    statement: (tickState: State) => Promise<void>,
+    attempts?: number
 }
 
-export async function parallelPromiseLoopV0<Element>({
-    maxThreads = 1, initialization, condition, finalExpression, iterateArray, statement, attempts
-}: parallelPromiseLoopV0Options<Element, number>) {
-    if (iterateArray) {
-        if (!initialization) initialization = () => 0;
-        if (!condition) condition = i => i < iterateArray.length;
-        if (!finalExpression) finalExpression = i => i + 1;
-    };
-    if (!attempts) attempts = 1;
-
+export async function parallelPromiseLoop<State>({
+    maxThreads = 1, initialization, condition, finalExpression, statement, attempts = 1
+}: parallelPromiseLoopOptions<State>) {
     let curThreads = 0;
-    // @ts-ignore
     let loopState = initialization();
     let nextThreadCallback: Function = () => 1;
     let allInit: boolean = false;
@@ -36,9 +27,7 @@ export async function parallelPromiseLoopV0<Element>({
                 await new Promise(function (resolve) { nextThreadCallback = resolve });
             }
             retryUponError({
-                func: iterateArray ?
-                    () => statement(iterateArray[loopState], loopState) :
-                    () => statement(loopState),
+                func: () => statement(loopState),
                 attempts
             })
                 .then(() => {
