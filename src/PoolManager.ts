@@ -3,12 +3,27 @@ import EventEmitter from 'events'
 import { parallelPromiseArrayLoop } from './parallelPromiseArrayLoop'
 import { retryUponError } from './retryUponError'
 
+export enum PoolState {
+    'initQueue' = 'initQueue',
+    'initStarting' = 'initStarting',
+    'initFailed' = 'initFailed',
+    'free' = 'free',
+    'running' = 'running',
+}
+
+export interface PoolStatus {
+    state: PoolState,
+    error?: any,
+}
+
 export interface Pool {
     init?: () => Promise<void>;
     executeTask: (data: any) => Promise<any>,
+    poolStatus: PoolStatus
 }
 
 export interface Task {
+    pool?: Pool,
     attempts?: number
     options: any
     result?: [Error | unknown | null, unknown | null]
@@ -17,49 +32,76 @@ export interface Task {
     _queueTimer?: NodeJS.Timeout
 }
 
-export type IDistributeTasks = (pools: Pool[], tasks: Task[]) => [Pool, Task | undefined][] | null | undefined;
+export type IDistributeTasksRes = [Pool | undefined, Task | undefined][] | null | undefined;
+export type IDistributeTasks = (pools: Pool[], tasks: Task[]) => IDistributeTasksRes;
 
 export interface Options {
     pools?: Pool[],
     poolInitQueueSize: number,
     distributeTasks?: IDistributeTasks,
+    distributePersonalTasks?: IDistributeTasks,
     // taskAttempts?: number,
     taskQueueTimeout?: number,
 }
 
+export const defaultDistributePersonalTasks: IDistributeTasks =
+    (pools: Pool[], tasks: Task[]): IDistributeTasksRes => {
+        const pairs: [Pool, Task][] = tasks
+            .filter(task => task.pool && pools.includes(task.pool))
+            .map(task => [task.pool as Pool, task]);
+        if (!pairs.length) return null;
+        return pairs;
+    }
+
 export const defaultDistributeTasks: IDistributeTasks =
-    (pools: Pool[], tasks: Task[]) => pools
-        .map((pool, i) => [pool, tasks[i]])
-// .filter(([pool, task]) => task)
+    (pools: Pool[], tasks: Task[]): IDistributeTasksRes => pools
+        .map((pool, i) => [pool, tasks[i]]);
 
 export class PoolManager extends EventEmitter {
     queueTasks: Task[] = [];
     runningTasks: Task[] = [];
+    poolList: Pool[] = [];
     freePools: Pool[] = [];
-    runningPools: Pool[] = [];
-    failedPools: [Pool, unknown][] = [];
     distributeTasks: IDistributeTasks;
+    distributePersonalTasks: IDistributeTasks;
 
     constructor(protected options: Options) {
         super();
         this.distributeTasks = this.options.distributeTasks || defaultDistributeTasks
+        this.distributePersonalTasks = this.options.distributePersonalTasks || defaultDistributePersonalTasks
         this.options.pools?.map(pool => this.addFreePool(pool))
     }
 
     async init({ pools, attempts, onerror }: { pools: Pool[], attempts: number | undefined, onerror?: (pool: Pool, error: Error | any) => void }) {
+
+        pools.forEach(pool => {
+            pool.poolStatus = {
+                state: PoolState.initQueue,
+            };
+            if (!this.poolList.includes(pool))
+                this.poolList.push(pool);
+        });
+
         await parallelPromiseArrayLoop<Pool>({
             iterateArray: pools,
             statement: async (pool: Pool): Promise<void> => {
                 try {
-                    if (pool.init)
+                    if (pool.init) {
+                        pool.poolStatus = {
+                            state: PoolState.initStarting
+                        };
                         await retryUponError({
                             func: () => pool.init && pool.init(),
                             attempts
                         });
+                    }
                     this.addFreePool(pool);
                 } catch (error) {
                     onerror && onerror(pool, error)
-                    this.failedPools.push([pool, error]);
+                    pool.poolStatus = {
+                        state: PoolState.initFailed,
+                        error,
+                    };
                 }
             },
             maxThreads: this.options.poolInitQueueSize,
@@ -70,10 +112,12 @@ export class PoolManager extends EventEmitter {
     }
 
     addFreePool(pool: Pool) {
-        const poolIndex = this.runningPools.indexOf(pool)
-        if (poolIndex !== -1) this.runningPools.splice(poolIndex, 1);
+        pool.poolStatus = {
+            state: PoolState.free
+        };
 
-        this.freePools.push(pool);
+        if (!this.freePools.includes(pool))
+            this.freePools.push(pool);
 
         this.distributeQueuedTasks();
 
@@ -88,17 +132,17 @@ export class PoolManager extends EventEmitter {
      * @internal
      */
     distributeQueuedTasks() {
-        if (!this.freePools.length || !this.queueTasks.length) return
-
         for (; ;) {
-            const directions = this.distributeTasks(this.freePools, this.queueTasks);
+            if (!this.freePools.length || !this.queueTasks.length) break;
 
-            if (!directions || !directions.length) break
+            const directions = this.getDirectionsForTaskDistributing();
+
+            if (!directions?.length) break
 
             let countEmptyTasks = 0;
 
             for (let [pool, task] of directions) {
-                if (!task) {
+                if (!pool || !task) {
                     countEmptyTasks++
                     continue
                 };
@@ -110,12 +154,25 @@ export class PoolManager extends EventEmitter {
         }
     }
 
-    proceedRawTask(rawTask: any): Task {
+    /**
+     * 
+     * @internal
+     */
+    getDirectionsForTaskDistributing(): IDistributeTasksRes {
+        const personalDirections = this.distributePersonalTasks(this.freePools, this.queueTasks.filter(task => task.pool));
+        if (personalDirections?.length) return personalDirections;
+
+        const defaultDirections = this.distributeTasks(this.freePools, this.queueTasks.filter(task => !task.pool));
+        if (defaultDirections?.length) return defaultDirections;
+    }
+
+    proceedRawTask(rawTask: any, { pool }: { pool?: Pool } = {}): Task {
         let _callback;
 
         const promise = new Promise((resolve) => _callback = resolve)
 
         const task: Task = {
+            pool,
             options: rawTask,
             promise,
             _callback: _callback as unknown as Function,
@@ -138,7 +195,9 @@ export class PoolManager extends EventEmitter {
     executeTask(pool: Pool, task: Task): void {
         const poolIndex = this.freePools.indexOf(pool)
         if (poolIndex !== -1) this.freePools.splice(poolIndex, 1);
-        this.runningPools.push(pool);
+        pool.poolStatus = {
+            state: PoolState.running
+        };
 
         if (task._queueTimer) clearTimeout(task._queueTimer)
 
