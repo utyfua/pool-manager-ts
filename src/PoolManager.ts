@@ -44,18 +44,14 @@ export interface Options {
     taskQueueTimeout?: number,
 }
 
-export const defaultDistributePersonalTasks: IDistributeTasks =
+export const defaultDistributeTasks: IDistributeTasks =
     (pools: Pool[], tasks: Task[]): IDistributeTasksRes => {
-        const pairs: [Pool, Task][] = tasks
+        const personalPairs: [Pool, Task][] = tasks
             .filter(task => task.pool && pools.includes(task.pool))
             .map(task => [task.pool as Pool, task]);
-        if (!pairs.length) return null;
-        return pairs;
-    }
-
-export const defaultDistributeTasks: IDistributeTasks =
-    (pools: Pool[], tasks: Task[]): IDistributeTasksRes => pools
-        .map((pool, i) => [pool, tasks[i]]);
+        if (personalPairs.length) return personalPairs;
+        return pools.map((pool, i) => [pool, tasks[i]])
+    };
 
 export class PoolManager extends EventEmitter {
     queueTasks: Task[] = [];
@@ -63,12 +59,10 @@ export class PoolManager extends EventEmitter {
     poolList: Pool[] = [];
     freePools: Pool[] = [];
     distributeTasks: IDistributeTasks;
-    distributePersonalTasks: IDistributeTasks;
 
     constructor(protected options: Options) {
         super();
         this.distributeTasks = this.options.distributeTasks || defaultDistributeTasks
-        this.distributePersonalTasks = this.options.distributePersonalTasks || defaultDistributePersonalTasks
         this.options.pools?.map(pool => this.addFreePool(pool))
     }
 
@@ -135,7 +129,7 @@ export class PoolManager extends EventEmitter {
         for (; ;) {
             if (!this.freePools.length || !this.queueTasks.length) break;
 
-            const directions = this.getDirectionsForTaskDistributing();
+            const directions = this.distributeTasks(this.freePools, this.queueTasks);
 
             if (!directions?.length) break
 
@@ -152,18 +146,6 @@ export class PoolManager extends EventEmitter {
 
             if (countEmptyTasks === directions.length) break;
         }
-    }
-
-    /**
-     * 
-     * @internal
-     */
-    getDirectionsForTaskDistributing(): IDistributeTasksRes {
-        const personalDirections = this.distributePersonalTasks(this.freePools, this.queueTasks.filter(task => task.pool));
-        if (personalDirections?.length) return personalDirections;
-
-        const defaultDirections = this.distributeTasks(this.freePools, this.queueTasks.filter(task => !task.pool));
-        if (defaultDirections?.length) return defaultDirections;
     }
 
     proceedRawTask(rawTask: any, { pool }: { pool?: Pool } = {}): Task {
