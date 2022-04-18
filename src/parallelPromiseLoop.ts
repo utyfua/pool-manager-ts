@@ -11,7 +11,7 @@ export interface parallelPromiseLoopOptions<State> {
     attempts?: number
 }
 
-export async function parallelPromiseLoop<State>({
+export function parallelPromiseLoop<State>({
     maxThreads = 1, initialization, condition, finalExpression, statement, attempts = 1
 }: parallelPromiseLoopOptions<State>) {
     let curThreads = 0;
@@ -20,7 +20,6 @@ export async function parallelPromiseLoop<State>({
     let allInit: boolean = false;
     return new Promise(async function (resolve, reject) {
         for (; ;) {
-            // @ts-ignore
             if (!await condition(loopState)) break;
             curThreads++;
             if (curThreads > maxThreads) {
@@ -36,7 +35,6 @@ export async function parallelPromiseLoop<State>({
                     allInit && !curThreads && resolve(null);
                 })
                 .catch(err => reject(err));
-            // @ts-ignore
             loopState = finalExpression(loopState)
         };
         !curThreads && resolve(null);
