@@ -35,13 +35,15 @@ export interface Task {
 export type IDistributeTasksRes = [Pool | undefined, Task | undefined][] | null | undefined;
 export type IDistributeTasks = (pools: Pool[], tasks: Task[]) => IDistributeTasksRes;
 
+export type TaskQueueTimeout = number | null
+
 export interface Options {
     pools?: Pool[],
     poolInitQueueSize: number,
     distributeTasks?: IDistributeTasks,
     distributePersonalTasks?: IDistributeTasks,
     // taskAttempts?: number,
-    taskQueueTimeout?: number,
+    taskQueueTimeout?: TaskQueueTimeout,
 }
 
 export const defaultDistributeTasks: IDistributeTasks =
@@ -148,18 +150,21 @@ export class PoolManager extends EventEmitter {
         }
     }
 
-    proceedRawTask(rawTask: any, { pool }: { pool?: Pool } = {}): Task {
+    proceedRawTask(rawTask: any, { pool, taskQueueTimeout }: { pool?: Pool, taskQueueTimeout?: TaskQueueTimeout } = {}): Task {
         let _callback;
 
         const promise = new Promise((resolve) => _callback = resolve)
+
+        if (taskQueueTimeout === undefined)
+            taskQueueTimeout = this.options.taskQueueTimeout;
 
         const task: Task = {
             pool,
             options: rawTask,
             promise,
             _callback: _callback as unknown as Function,
-            _queueTimer: this.options.taskQueueTimeout ?
-                setTimeout(() => this.cancelTask(task), this.options.taskQueueTimeout) :
+            _queueTimer: typeof taskQueueTimeout === 'number' ?
+                setTimeout(() => this.cancelTask(task), taskQueueTimeout) :
                 undefined
         }
 

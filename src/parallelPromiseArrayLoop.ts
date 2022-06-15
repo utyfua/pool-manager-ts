@@ -4,8 +4,8 @@ type State = number;
 
 export interface parallelPromiseArrayLoopOptions<Element> {
     iterateArray: Element[],
-    statement: (element: Element, index: State, iterateArray: Element[]) => Promise<void>,
-    
+    statement: (element: Element, index?: State, iterateArray?: Element[]) => Promise<void>,
+
     maxThreads?: number,
     attempts?: number
 }
