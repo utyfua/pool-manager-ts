@@ -22,11 +22,11 @@ export interface Pool {
     poolStatus: PoolStatus
 }
 
-export interface Task {
+export interface Task<Result = any> {
     pool?: Pool,
     attempts?: number
     options: any
-    result?: [Error | unknown | null, unknown | null]
+    result?: [Error | null, Result | null]
     _callback: Function;
     promise: Promise<any>
     _queueTimer?: NodeJS.Timeout
@@ -44,6 +44,7 @@ export interface Options {
     distributePersonalTasks?: IDistributeTasks,
     // taskAttempts?: number,
     taskQueueTimeout?: TaskQueueTimeout,
+    taskExecuteAttempts?: number,
 }
 
 export const defaultDistributeTasks: IDistributeTasks =
@@ -150,7 +151,11 @@ export class PoolManager extends EventEmitter {
         }
     }
 
-    proceedRawTask(rawTask: any, { pool, taskQueueTimeout }: { pool?: Pool, taskQueueTimeout?: TaskQueueTimeout } = {}): Task {
+    proceedRawTask<Result = any>(rawTask: any, { pool, taskQueueTimeout, attempts }: {
+        pool?: Pool,
+        taskQueueTimeout?: TaskQueueTimeout,
+        attempts?: number
+    } = {}): Task<Result> {
         let _callback;
 
         const promise = new Promise((resolve) => _callback = resolve)
@@ -158,10 +163,11 @@ export class PoolManager extends EventEmitter {
         if (taskQueueTimeout === undefined)
             taskQueueTimeout = this.options.taskQueueTimeout;
 
-        const task: Task = {
+        const task: Task<Result> = {
             pool,
             options: rawTask,
             promise,
+            attempts,
             _callback: _callback as unknown as Function,
             _queueTimer: typeof taskQueueTimeout === 'number' ?
                 setTimeout(() => this.cancelTask(task), taskQueueTimeout) :
@@ -197,7 +203,7 @@ export class PoolManager extends EventEmitter {
             func: () => {
                 return pool.executeTask(task.options);
             },
-            attempts: task.attempts,
+            attempts: task.attempts || this.options.taskExecuteAttempts,
         })
             .then(response => [null, response, pool])
             .catch(err => [err, null, pool])
