@@ -1,89 +1,36 @@
 import EventEmitter from 'events'
 
 import { parallelPromiseArrayLoop } from '../parallelPromiseArrayLoop'
-import { retryUponError } from '../retryUponError'
-import { PoolManagerOptions, PoolInstance, DefaultPoolManagerOptions, PoolInstanceState, PoolStatus, PoolTaskOptions } from './types';
+import { PoolManagerOptions, DefaultPoolManagerOptions, PoolTaskOptions, PoolInstance_InitOptions } from './types';
 import { PoolTask } from './Task';
+import { PoolInstance } from './Instance'
 
-export class PoolManager extends EventEmitter {
+export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance> extends EventEmitter {
     options: PoolManagerOptions;
     queueTasks: PoolTask[] = [];
     runningTasks: PoolTask[] = [];
-    poolList: PoolInstance[] = [];
-    freePools: PoolInstance[] = [];
+    poolList: PoolInstanceGeneric[] = [];
+    freePools: PoolInstanceGeneric[] = [];
 
-    constructor({ pools, ...options }: Partial<PoolManagerOptions> & { pools?: PoolInstance[] } = {}) {
+    constructor(options: Partial<PoolManagerOptions> = {}) {
         super();
         this.options = Object.assign({}, DefaultPoolManagerOptions, options)
-
-        if (pools) {
-            this.addPools(pools)
-        }
     }
 
-    async init({ pools, attempts, onerror }: { pools: PoolInstance[], attempts: number | undefined, onerror?: (pool: PoolInstance, error: Error | any) => void }) {
-        this.addPools(pools, {
-            state: PoolInstanceState.initQueue,
-        });
+    async startPools(options: { pools: PoolInstanceGeneric[] } & PoolInstance_InitOptions) {
+        options.attempts ??= this.options.poolInitAttempts;
 
-        await parallelPromiseArrayLoop<PoolInstance>({
-            iterateArray: pools,
-            statement: async (pool: PoolInstance): Promise<void> => {
-                try {
-                    if (pool.init) {
-                        pool.poolStatus = {
-                            state: PoolInstanceState.initStarting
-                        };
-                        await retryUponError({
-                            func: () => pool.init && pool.init(),
-                            attempts: attempts || this.options.poolInitAttempts,
-                        });
-                    }
-                    if (pool.poolStatus.state === PoolInstanceState.initQueue)
-                        this.addFreePool(pool);
-                } catch (error) {
-                    onerror && onerror(pool, error)
-                    pool.poolStatus = {
-                        state: PoolInstanceState.initFailed,
-                        error,
-                    };
-                }
+        await parallelPromiseArrayLoop<PoolInstanceGeneric>({
+            iterateArray: options.pools,
+            statement: async (pool: PoolInstanceGeneric): Promise<void> => {
+                await pool._start(options);
             },
             maxThreads: this.options.poolInitQueueSize,
         })
+
         if (!this.freePools.length && !this.runningTasks.length)
             throw new Error('No pools are available')
         return this;
-    }
-
-    addPools(pools: PoolInstance[], status?: PoolStatus): void {
-        pools.forEach(pool => this.addPool(pool, status));
-    }
-
-    addPool(pool: PoolInstance, status: PoolStatus = { state: PoolInstanceState.free }): void {
-        pool.poolStatus = status;
-
-        if (!this.poolList.includes(pool))
-            this.poolList.push(pool);
-
-        if (status.state === PoolInstanceState.free)
-            this.addFreePool(pool);
-    }
-
-    addFreePool(pool: PoolInstance): void {
-        pool.poolStatus = {
-            state: PoolInstanceState.free
-        };
-
-        if (!this.freePools.includes(pool))
-            this.freePools.push(pool);
-
-        this.distributeQueuedTasks();
-
-        if (!this.freePools.includes(pool)) {
-            this.emit('freePool', pool)
-            return
-        }
     }
 
     /**

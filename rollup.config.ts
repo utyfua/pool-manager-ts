@@ -40,7 +40,10 @@ export default {
     ],
     // Indicate here external modules you don't wanna include in your bundle (i.e.: 'lodash')
     external: [
-        'events', // nodejs module(s)
+        // nodejs module(s)
+        'events',
+        'node:child_process',
+
         ...Object.keys(pkg.dependencies || {}),
         ...Object.keys(pkg.peerDependencies || {})
     ],

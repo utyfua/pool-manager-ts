@@ -1,31 +1,7 @@
 
 import type { PoolTask } from './Task'
-
-export enum PoolInstanceState {
-    'initQueue' = 'initQueue',
-    'initStarting' = 'initStarting',
-    'initFailed' = 'initFailed',
-    'free' = 'free',
-    'running' = 'running'
-}
-
-export enum PoolTaskState {
-    queue = 'queue',
-    running = 'running',
-    finished = 'finished',
-    canceled = 'canceled',
-}
-
-export interface PoolStatus {
-    state: PoolInstanceState;
-    error?: any;
-}
-
-export interface PoolInstance {
-    init?: () => Promise<void>;
-    executeTask: (data: any) => Promise<any>;
-    poolStatus: PoolStatus;
-}
+import type { PoolInstance } from './Instance'
+import type { PoolManager } from './Manager';
 
 export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance, PoolTask];
 
@@ -61,9 +37,39 @@ export const DefaultPoolManagerOptions: PoolManagerOptions = {
     taskPoolExecuteAttempts: 1,
 };
 
+export enum PoolTaskState {
+    queue = 'queue',
+    running = 'running',
+    finished = 'finished',
+    canceled = 'canceled',
+}
+
 export interface PoolTaskOptions {
     pool?: PoolInstance,
     taskQueueTimeout?: PoolTaskQueueTimeout,
     poolAttempts?: number,
     generalAttempts?: number,
+}
+
+export interface PoolInstanceOptions {
+    manager?: PoolManager,
+    poolName?: string | number;
+}
+
+export interface PoolInstance_InitOptions {
+    attempts?: number | undefined,
+    onerror?: (pool: PoolInstance, error: Error | any) => void
+}
+
+export enum PoolInstanceState {
+    'initQueue' = 'initQueue',
+    'initStarting' = 'initStarting',
+    'initFailed' = 'initFailed',
+    'free' = 'free',
+    'running' = 'running',
+    'failed' = 'failed',
+}
+
+export interface PoolTaskMini {
+    taskContent: any;
 }

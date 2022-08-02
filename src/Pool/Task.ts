@@ -1,7 +1,7 @@
 import { retryUponError } from '../retryUponError';
 import type { PoolManager } from './Manager';
-import { PoolInstance, PoolTaskResult, PoolTaskOptions, PoolTaskState, PoolInstanceState } from './types';
-
+import { PoolTaskResult, PoolTaskOptions, PoolTaskState } from './types';
+import type { PoolInstance } from './Instance'
 
 export class PoolTask<Result = any> {
     pool?: PoolInstance;
@@ -75,7 +75,6 @@ export class PoolTask<Result = any> {
         this.state = PoolTaskState.finished;
         this.result = result;
         this._resolve(result);
-        this.manager.addFreePool(pool);
     }
 
 
@@ -86,9 +85,6 @@ export class PoolTask<Result = any> {
     execute(pool: PoolInstance): void {
         const poolIndex = this.manager.freePools.indexOf(pool)
         if (poolIndex !== -1) this.manager.freePools.splice(poolIndex, 1);
-        pool.poolStatus = {
-            state: PoolInstanceState.running
-        };
 
         if (this._queueTimer) {
             clearTimeout(this._queueTimer)
@@ -100,9 +96,7 @@ export class PoolTask<Result = any> {
         this.manager.emit('startedTask', this, pool);
 
         retryUponError({
-            func: () => {
-                return pool.executeTask(this.taskContent);
-            },
+            func: () => pool._executeTask(this),
             attempts: this.poolAttempts,
         })
             .then((response): PoolTaskResult => [null, response, pool, this])
