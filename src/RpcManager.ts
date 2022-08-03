@@ -136,13 +136,4 @@ export class RpcManager {
         Object.values(responseCallbacks)
             .forEach(({ reject }) => reject(new Error('Destination was closed')))
     }
-    // _getEventErrorObjectByCpInternalEvent(errorEvent: ProcessPoolInstanceEventError) {
-    //     let error = errorEvent.error;
-    //     if (!error) {
-    //         let message = 'Child process exit'
-    //         if (errorEvent.code !== null) message += ' with code ' + errorEvent.code;
-    //         error = new Error(message)
-    //     }
-    //     return error;
-    // }
 }
