@@ -1,6 +1,6 @@
 import { ChildProcess, fork } from 'node:child_process'
 import { PoolInstance, PoolTaskMini } from "../Pool";
-import { RpcManager } from '../RpcManager';
+import { RpcManager, RpcMessage } from '../RpcManager';
 import { ProcessPoolInstanceOptions, ProcessPoolRpcId } from './types';
 import treeKill from 'tree-kill'
 
@@ -22,11 +22,12 @@ export class ProcessPoolInstance extends PoolInstance {
         this.rpcManager = new RpcManager({
             destination: childProcess,
             rpcId: ProcessPoolRpcId,
-            handler(message) {
-                return;
-            }
+            handler: (message) => {
+                return this.userRpcMessageHandler(message)
+            },
         })
 
+        await this.rpcManager.waitSpawn();
         await this.rpcManager.request({
             action: 'start',
         })
@@ -38,6 +39,10 @@ export class ProcessPoolInstance extends PoolInstance {
         this.childProcess = undefined;
         this.rpcManager = undefined;
 
+        await this.closeProcess(childProcess);
+    }
+
+    async closeProcess(childProcess: ChildProcess) {
         if (childProcess.pid)
             treeKill(childProcess.pid, 'SIGKILL', () => 1);
     }
@@ -45,5 +50,9 @@ export class ProcessPoolInstance extends PoolInstance {
     async executeTask({ taskContent }: PoolTaskMini): Promise<any> {
         if (!this.rpcManager) throw new Error('no this.rpcManager');
         return this.rpcManager.request({ action: 'executeTask', taskContent });
+    }
+
+    userRpcMessageHandler(message: RpcMessage) {
+        return
     }
 }

@@ -1,4 +1,3 @@
-
 export interface RpcMessageBase {
     rpcId: string,
     rpcMessageId: string,
@@ -7,16 +6,23 @@ export interface RpcMessageRequest extends RpcMessageBase {
     action: 'request';
     message: any,
 }
+
+export interface RpcMessageResponseMessageResult {
+    type: 'result',
+    result: any
+}
+
+export interface RpcMessageResponseMessageError {
+    type: 'error',
+    error: any,
+    isPlainObject?: boolean
+}
+
+export type RpcMessageResponseMessage = RpcMessageResponseMessageResult | RpcMessageResponseMessageError;
+
 export interface RpcMessageResponse extends RpcMessageBase {
     action: 'response';
-    message: {
-        type: 'result',
-        result: any
-    } | {
-        type: 'error',
-        error: any,
-        isErrorObject?: boolean
-    },
+    message: RpcMessageResponseMessage,
 }
 
 export type RpcMessage = RpcMessageRequest | RpcMessageResponse
@@ -26,9 +32,11 @@ export interface RpcManagerDestination {
     on(eventName: 'message', handler: (rpcMessage: RpcMessage) => void): void
     on(eventName: 'close', handler: () => void): void
     on(eventName: 'error', handler: () => void): void
+    on(eventName: 'spawn', handler: () => void): void
     off(eventName: 'message', handler: (rpcMessage: RpcMessage) => void): void
     off(eventName: 'close', handler: () => void): void
     off(eventName: 'error', handler: () => void): void
+    off(eventName: 'spawn', handler: () => void): void
 }
 
 export interface RpcManagerOptions {
@@ -53,6 +61,22 @@ export class RpcManager {
         destination.on('close', this.closeHandler)
         destination.on('error', this.closeHandler)
     }
+
+    waitSpawn(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const destination = this.options.destination
+            function clean(next: () => void) {
+                destination.off('spawn', onSpawn)
+                destination.off('error', onError)
+                next();
+            }
+            const onSpawn = () => clean(resolve);
+            const onError = () => clean(reject);
+            destination.on('spawn', onSpawn)
+            destination.on('error', onError)
+        })
+    }
+
     async messageHandler(message: RpcMessage) {
         // ignore message if we cant detect our identification
         if (typeof message !== 'object' || message.rpcId !== this.options.rpcId) return;
@@ -75,51 +99,47 @@ export class RpcManager {
                     responseMessage.message = {
                         type: 'error',
                         error: error.stack,
-                        isErrorObject: true,
                     }
                 } else {
                     responseMessage.message = {
                         type: 'error',
                         error,
+                        isPlainObject: true,
                     }
                 }
             }
-            this.send(responseMessage);
+            this.options.destination.send(responseMessage);
         }
 
         if (message.action === 'response') {
-            const callbacks = this.responseCallbacks[message.rpcMessageId];
+            const callback = this.responseCallbacks[message.rpcMessageId];
             delete this.responseCallbacks[message.rpcMessageId];
-            const response = message.message;
-            if (response.type === 'result')
-                callbacks.response(response.result);
-            else {
-                let error = response.error;
-                if (response.isErrorObject) error = new Error(error)
-                callbacks.reject(error);
-            }
+            callback(message.message);
         }
     }
 
-    responseCallbacks: Record<string, {
-        response: (response: any) => any,
-        reject: (error: Error) => void
-    }> = {};
+    responseCallbacks: Record<string, (message: RpcMessageResponseMessage) => void> = {};
     async request<Response = any>(message: any): Promise<Response> {
+        const destination = this.options.destination;
         const requestMessage: RpcMessage = {
             rpcId: this.options.rpcId,
             rpcMessageId: this.getNewId(),
             action: 'request',
             message
         }
-        this.send(requestMessage);
-        return new Promise((response, reject) => {
-            this.responseCallbacks[requestMessage.rpcMessageId] = { response, reject }
-        })
-    }
 
-    send(message: RpcMessage) {
-        return this.options.destination.send(message);
+        destination.send(requestMessage);
+        const response = await new Promise<RpcMessageResponseMessage>((response) => {
+            this.responseCallbacks[requestMessage.rpcMessageId] = response
+        })
+
+        if (response.type === 'result')
+            return response.result;
+        else {
+            let error = response.error;
+            if (!response.isPlainObject) error = new Error(error)
+            throw error;
+        }
     }
 
     closeHandler() {
@@ -134,6 +154,9 @@ export class RpcManager {
         const responseCallbacks = this.responseCallbacks;
         this.responseCallbacks = {};
         Object.values(responseCallbacks)
-            .forEach(({ reject }) => reject(new Error('Destination was closed')))
+            .forEach((callback) => callback({
+                type: 'error',
+                error: new Error('Destination was closed'),
+            }))
     }
 }
