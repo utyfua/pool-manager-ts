@@ -2,13 +2,12 @@
 import type { PoolTask } from './Task'
 import type { PoolInstance } from './Instance'
 import type { PoolManager } from './Manager';
+import { TimeoutValue } from '../utils';
 
 export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance, PoolTask];
 
 export type IDistributePoolTasksRes = [PoolInstance | undefined, PoolTask | undefined][] | null | undefined;
 export type IDistributePoolTasks = (pools: PoolInstance[], tasks: PoolTask[]) => IDistributePoolTasksRes;
-
-export type PoolTaskQueueTimeout = number | null;
 
 export const defaultDistributeTasks: IDistributePoolTasks = (pools: PoolInstance[], tasks: PoolTask[]): IDistributePoolTasksRes => {
     const personalPairs: [PoolInstance, PoolTask][] = tasks
@@ -23,7 +22,7 @@ export interface PoolManagerOptions {
     poolInitQueueSize: number;
     poolInitAttempts: number;
     distributeTasks: IDistributePoolTasks;
-    taskQueueTimeout: PoolTaskQueueTimeout;
+    taskQueueTimeout: TimeoutValue;
     taskGeneralExecuteAttempts: number;
     taskPoolExecuteAttempts: number;
 }
@@ -46,7 +45,7 @@ export enum PoolTaskState {
 
 export interface PoolTaskOptions {
     pool?: PoolInstance,
-    taskQueueTimeout?: PoolTaskQueueTimeout,
+    taskQueueTimeout?: TimeoutValue,
     poolAttempts?: number,
     generalAttempts?: number,
 }

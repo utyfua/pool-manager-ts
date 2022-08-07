@@ -1,3 +1,6 @@
+import { setTimeout } from "node:timers/promises";
+import { TimeoutValue } from "./utils";
+
 export interface RpcMessageBase {
     rpcId: string,
     rpcMessageId: string,
@@ -30,19 +33,18 @@ export type RpcMessage = RpcMessageRequest | RpcMessageResponse
 export interface RpcManagerDestination {
     send(message: RpcMessage): void
     on(eventName: 'message', handler: (rpcMessage: RpcMessage) => void): void
-    on(eventName: 'close', handler: () => void): void
-    on(eventName: 'error', handler: () => void): void
-    on(eventName: 'spawn', handler: () => void): void
+    on(eventName: 'close' | 'spawn', handler: () => void): void
+    on(eventName: 'error', handler: (error: Error) => void): void
     off(eventName: 'message', handler: (rpcMessage: RpcMessage) => void): void
-    off(eventName: 'close', handler: () => void): void
-    off(eventName: 'error', handler: () => void): void
-    off(eventName: 'spawn', handler: () => void): void
+    off(eventName: 'close' | 'spawn', handler: () => void): void
+    off(eventName: 'error', handler: (error: Error) => void): void
 }
 
 export interface RpcManagerOptions {
     destination: RpcManagerDestination;
     rpcId: string;
-    handler: (message: any) => Promise<any> | any
+    handler: (message: any) => Promise<any> | any;
+    requestTimeout?: TimeoutValue;
 }
 
 export class RpcManager {
@@ -63,16 +65,20 @@ export class RpcManager {
     }
 
     waitSpawn(): Promise<void> {
+        return this.waitForEvent('spawn');
+    }
+
+    waitForEvent(eventName: 'close' | 'spawn'): Promise<void> {
         return new Promise((resolve, reject) => {
             const destination = this.options.destination
-            function clean(next: () => void) {
-                destination.off('spawn', onSpawn)
+            function clean(next: (arg?: any) => void, arg?: any) {
+                destination.off(eventName, onEvent)
                 destination.off('error', onError)
-                next();
+                next(arg);
             }
-            const onSpawn = () => clean(resolve);
-            const onError = () => clean(reject);
-            destination.on('spawn', onSpawn)
+            const onEvent = () => clean(resolve);
+            const onError = (error: Error) => clean(reject, error);
+            destination.on(eventName, onEvent)
             destination.on('error', onError)
         })
     }
@@ -113,13 +119,17 @@ export class RpcManager {
 
         if (message.action === 'response') {
             const callback = this.responseCallbacks[message.rpcMessageId];
-            delete this.responseCallbacks[message.rpcMessageId];
-            callback(message.message);
+            if (callback)
+                callback(message.message);
         }
     }
 
     responseCallbacks: Record<string, (message: RpcMessageResponseMessage) => void> = {};
-    async request<Response = any>(message: any): Promise<Response> {
+    async request<Response = any>(
+        message: any,
+        { timeout = this.options.requestTimeout }:
+            { timeout?: TimeoutValue } = {}
+    ): Promise<Response> {
         const destination = this.options.destination;
         const requestMessage: RpcMessage = {
             rpcId: this.options.rpcId,
@@ -129,9 +139,23 @@ export class RpcManager {
         }
 
         destination.send(requestMessage);
-        const response = await new Promise<RpcMessageResponseMessage>((response) => {
-            this.responseCallbacks[requestMessage.rpcMessageId] = response
-        })
+
+        const promises = [
+            new Promise<RpcMessageResponseMessage>((cb) => {
+                this.responseCallbacks[requestMessage.rpcMessageId] = cb
+            })
+        ]
+
+        if (typeof timeout === 'number') {
+            promises.push(setTimeout(timeout).then(() => ({
+                type: 'error',
+                error: new Error('Timeout'),
+            })))
+        }
+
+        const response = await Promise.race(promises);
+
+        delete this.responseCallbacks[requestMessage.rpcMessageId];
 
         if (response.type === 'result')
             return response.result;

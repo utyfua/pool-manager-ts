@@ -43,6 +43,7 @@ export default {
         // nodejs module(s)
         'events',
         'node:child_process',
+        'node:timers/promises',
 
         ...Object.keys(pkg.dependencies || {}),
         ...Object.keys(pkg.peerDependencies || {})

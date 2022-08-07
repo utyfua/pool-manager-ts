@@ -23,6 +23,5 @@
     "noImplicitAny": false,
   },
   "include": ["./src/**/*.tsx", "./src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "./test/**/*.spec.ts"],
-  "files": ["test/globals.d.ts"]
+  "exclude": ["node_modules", "dist", "./test/**/*.spec.ts"]
 }

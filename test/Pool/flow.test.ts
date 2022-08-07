@@ -1,3 +1,5 @@
+/// <reference path="../globals.d.ts" />
+
 import { PoolManager, PoolInstance, PoolTaskOptions, ProcessPoolInstance } from '../../dist/'
 import { shuffleArray } from '../utils';
 import { PoolInstanceTestBuilder } from './PoolInstanceTest.js';
