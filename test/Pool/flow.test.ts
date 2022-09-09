@@ -105,6 +105,16 @@ const testLevels = {
                 })
             },
         },
+        {
+            flowName: 'child process treeKill',
+            getClassConstructor({ manager }: { manager: PoolManager }): PoolInstance {
+                return new ProcessPoolInstance({
+                    manager,
+                    forkModulePath: 'test/Pool/childProcess.js',
+                    killMode: 'treeKill',
+                })
+            },
+        },
     ],
     poolCountList: [
         1,

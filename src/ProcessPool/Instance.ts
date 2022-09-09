@@ -2,7 +2,6 @@ import { ChildProcess, fork } from 'node:child_process'
 import { PoolInstance, PoolTaskMini } from "../Pool";
 import { RpcManager, RpcMessage } from '../RpcManager';
 import { ProcessPoolInstanceOptions, ProcessPoolRpcId } from './types';
-import treeKill from 'tree-kill'
 
 export class ProcessPoolInstance extends PoolInstance {
     childProcess?: ChildProcess;
@@ -56,6 +55,7 @@ export class ProcessPoolInstance extends PoolInstance {
             error = await rpcManager.waitForEvent('close')
                 .then(_ => undefined).catch(error => error)
         } else if (killMode === 'treeKill') {
+            const { default: treeKill } = await import('tree-kill');
             error = await new Promise(callback => treeKill(pid, killSignal, callback))
         } else {
             error = new Error(`Unknown kill mode: ${killMode}`);

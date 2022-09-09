@@ -4,7 +4,7 @@ import type { PoolInstance } from './Instance'
 import type { PoolManager } from './Manager';
 import { TimeoutValue } from '../utils';
 
-export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance, PoolTask];
+export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance | null, PoolTask];
 
 export type IDistributePoolTasksRes = [PoolInstance | undefined, PoolTask | undefined][] | null | undefined;
 export type IDistributePoolTasks = (pools: PoolInstance[], tasks: PoolTask[]) => IDistributePoolTasksRes;
@@ -52,7 +52,7 @@ export interface PoolTaskOptions {
 
 export interface PoolInstanceOptions {
     manager?: PoolManager,
-    poolName?: string | number;
+    poolInstanceName?: string | number;
 }
 
 export interface PoolInstance_InitOptions {

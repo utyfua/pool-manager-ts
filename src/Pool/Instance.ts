@@ -7,11 +7,11 @@ type ErrorType = Error | any;
 
 export class PoolInstance extends EventEmitter {
     manager?: PoolManager;
-    poolName: string;
+    poolInstanceName: string;
     constructor(options: PoolInstanceOptions = {}) {
         super();
         this.manager = options.manager;
-        this.poolName = `${options.poolName || Date.now()}`;
+        this.poolInstanceName = `${options.poolInstanceName || Date.now()}`;
 
         this.manager?.poolList.push(this);
     }

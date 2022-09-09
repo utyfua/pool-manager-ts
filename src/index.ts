@@ -1,5 +1,6 @@
 export * from './Pool'
 export * from './ProcessPool'
+export * from './PrometheusMetrics/v0'
 export * from './parallelPromiseLoop'
 export * from './parallelPromiseArrayLoop'
 export * from './retryUponError'

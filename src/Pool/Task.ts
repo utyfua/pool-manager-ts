@@ -1,9 +1,10 @@
+import EventEmitter from 'events';
 import { retryUponError } from '../retryUponError';
 import type { PoolManager } from './Manager';
 import { PoolTaskResult, PoolTaskOptions, PoolTaskState } from './types';
 import type { PoolInstance } from './Instance'
 
-export class PoolTask<Result = any> {
+export class PoolTask<Result = any> extends EventEmitter {
     pool?: PoolInstance;
     generalAttempts?: number;
     poolAttempts?: number;
@@ -13,6 +14,8 @@ export class PoolTask<Result = any> {
     _queueTimer?: NodeJS.Timeout;
 
     constructor(public manager: PoolManager, public taskContent: any, options: PoolTaskOptions = {}) {
+        super();
+
         // assign options
         Object.assign(this, options)
 
@@ -27,6 +30,8 @@ export class PoolTask<Result = any> {
         }
 
         this.state = PoolTaskState.queue;
+
+        this.manager.emit('taskInit', this);
     }
 
     _state?: PoolTaskState;
@@ -63,18 +68,20 @@ export class PoolTask<Result = any> {
     }
 
     cancel(reason: string = 'TASK_CANCEL') {
-        this.state = PoolTaskState.canceled;
-        this._resolve([new Error(reason)])
+        const result: PoolTaskResult = [new Error(reason), null, null, this];
+        this.resolve(result, PoolTaskState.canceled)
     }
 
     /**
      * 
      * @internal
      */
-    resolve(pool: PoolInstance, result: PoolTaskResult): void {
-        this.state = PoolTaskState.finished;
+    resolve(result: PoolTaskResult, state: PoolTaskState = PoolTaskState.finished): void {
+        this.state = state;
         this.result = result;
         this._resolve(result);
+        this.manager.emit('taskResult', this, result);
+        this.emit('result', result);
     }
 
 
@@ -83,6 +90,7 @@ export class PoolTask<Result = any> {
      * @internal
      */
     execute(pool: PoolInstance): void {
+        this.pool = pool;
         const poolIndex = this.manager.freePools.indexOf(pool)
         if (poolIndex !== -1) this.manager.freePools.splice(poolIndex, 1);
 
@@ -93,7 +101,8 @@ export class PoolTask<Result = any> {
 
         this.state = PoolTaskState.running
 
-        this.manager.emit('startedTask', this, pool);
+        this.manager.emit('taskExecute', this, pool);
+        this.emit('execute', this, pool);
 
         retryUponError({
             func: () => pool._executeTask(this),
@@ -101,6 +110,6 @@ export class PoolTask<Result = any> {
         })
             .then((response): PoolTaskResult => [null, response, pool, this])
             .catch((err): PoolTaskResult => [err, null, pool, this])
-            .then(result => this.resolve(pool, result))
+            .then(result => this.resolve(result))
     }
 }
