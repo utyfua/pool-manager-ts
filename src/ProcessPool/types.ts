@@ -15,4 +15,5 @@ export interface ProcessPoolInstanceOptions extends PoolInstanceOptions {
     killMode: 'kill' | 'treeKill';
     killSignal?: NodeJS.Signals | number;
     killCallback: (error?: Error | undefined) => void;
+    skipKilledCheck?: boolean,
 }

@@ -1,4 +1,4 @@
-import { EventEmitter } from "stream";
+import EventEmitter from 'events'
 import { retryUponError } from "../retryUponError";
 import type { PoolManager } from "./Manager";
 import { PoolInstanceOptions, PoolInstanceState, PoolInstance_InitOptions, PoolTaskMini } from "./types";

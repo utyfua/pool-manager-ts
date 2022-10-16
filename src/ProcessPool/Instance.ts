@@ -45,21 +45,66 @@ export class ProcessPoolInstance extends PoolInstance {
         await this.killProcess(childProcess, rpcManager);
     }
 
+    /**
+     * Kill process using `childProcess.kill`
+     * @returns Error if happened
+     * @internal
+     */
+    async killProcessByKill(
+        childProcess: ChildProcess,
+        rpcManager: RpcManager,
+        killSignal?: NodeJS.Signals | number
+    ): Promise<Error | undefined> {
+        try {
+            childProcess.kill(killSignal);
+            await rpcManager.waitForEvent('close');
+        } catch (error) {
+            return error as Error;
+        }
+    }
+
+    /**
+     * Kill process using `tree-kill`
+     * @returns Error if happened
+     * @internal
+     */
+    async killProcessByTreeKill(
+        childProcess: ChildProcess,
+        rpcManager: RpcManager,
+        pid: number,
+        killSignal?: NodeJS.Signals | number,
+    ): Promise<Error | undefined> {
+        const { default: treeKill } = await import('tree-kill');
+        let error = await new Promise<Error | undefined>(callback => treeKill(pid, killSignal, callback))
+
+        // for some reason root process will stay alive without any error so lets kill by default method
+        if (!error && childProcess.exitCode === null) {
+            error = await this.killProcessByKill(childProcess, rpcManager, killSignal)
+        }
+
+        return error;
+    }
+
     async killProcess(childProcess: ChildProcess, rpcManager: RpcManager) {
         const pid = childProcess.pid
         if (!pid) return;
+
         const { killMode, killSignal, killCallback } = this.options;
         let error: Error | undefined;
+
         if (killMode === 'kill') {
-            childProcess.kill(killSignal);
-            error = await rpcManager.waitForEvent('close')
-                .then(_ => undefined).catch(error => error)
+            error = await this.killProcessByKill(childProcess, rpcManager, killSignal)
         } else if (killMode === 'treeKill') {
-            const { default: treeKill } = await import('tree-kill');
-            error = await new Promise(callback => treeKill(pid, killSignal, callback))
+            error = await this.killProcessByTreeKill(childProcess, rpcManager, pid, killSignal)
         } else {
             error = new Error(`Unknown kill mode: ${killMode}`);
         }
+
+        // in case if process still alive for some reason
+        if (!error && childProcess.signalCode === null && childProcess.exitCode === null && !this.options.skipKilledCheck) {
+            error = new Error(`Process with pid ${pid} still alive but should be killed by now using "${killMode}" mode`)
+        }
+
         killCallback(error);
     }
 
