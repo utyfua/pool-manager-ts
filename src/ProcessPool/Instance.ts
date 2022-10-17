@@ -57,7 +57,10 @@ export class ProcessPoolInstance extends PoolInstance {
     ): Promise<Error | undefined> {
         try {
             childProcess.kill(killSignal);
-            await rpcManager.waitForEvent('close');
+
+            // for some reason we can kill instantly, so here will be no event after
+            if (!childProcess.killed)
+                await rpcManager.waitForEvent('close');
         } catch (error) {
             return error as Error;
         }
@@ -101,7 +104,11 @@ export class ProcessPoolInstance extends PoolInstance {
         }
 
         // in case if process still alive for some reason
-        if (!error && childProcess.signalCode === null && childProcess.exitCode === null && !this.options.skipKilledCheck) {
+        if (!error && !this.options.skipKilledCheck &&
+            childProcess.signalCode === null && 
+            childProcess.exitCode === null && 
+            !childProcess.killed
+        ) {
             error = new Error(`Process with pid ${pid} still alive but should be killed by now using "${killMode}" mode`)
         }
 
