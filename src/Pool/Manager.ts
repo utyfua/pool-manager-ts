@@ -64,6 +64,7 @@ export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance
         // setup options
         options.generalAttempts ??= this.options.taskGeneralExecuteAttempts
         options.poolAttempts ??= this.options.taskPoolExecuteAttempts
+        options.taskQueueTimeout ??= this.options.taskQueueTimeout
 
         const task = new PoolTask<Result>(this, taskContent, options);
 
