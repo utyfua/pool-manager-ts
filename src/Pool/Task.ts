@@ -77,6 +77,11 @@ export class PoolTask<Result = any> extends EventEmitter {
      * @internal
      */
     resolve(result: PoolTaskResult, state: PoolTaskState = PoolTaskState.finished): void {
+        if (this.generalAttempts !== undefined) this.generalAttempts--;
+        if (state === PoolTaskState.finished && result[0] && this.generalAttempts) {
+            this.state = PoolTaskState.queue;
+            return;
+        }
         this.state = state;
         this.result = result;
         this._resolve(result);
