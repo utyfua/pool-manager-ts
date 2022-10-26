@@ -56,14 +56,11 @@ export class PoolTask<Result = any> extends EventEmitter {
         }
 
         // add task to the manager' state array
-        let pushTarget: PoolTask[] | undefined;
         if (state === PoolTaskState.queue) {
-            pushTarget = this.manager.queueTasks;
+            this.manager.queueTasks.push(this);
+            this.manager.distributeQueuedTasks()
         } else if (state === PoolTaskState.running) {
-            pushTarget = this.manager.runningTasks;
-        }
-        if (pushTarget) {
-            pushTarget.push(this);
+            this.manager.runningTasks.push(this);
         }
     }
 

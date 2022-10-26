@@ -1,5 +1,6 @@
 /// <reference path="../globals.d.ts" />
 
+// @ts-ignore
 import { PoolManager, PoolInstance, PoolTaskOptions, ProcessPoolInstance } from '../../dist/'
 import { shuffleArray } from '../utils';
 import { PoolInstanceTestBuilder } from './PoolInstanceTest.js';
@@ -10,10 +11,12 @@ type TaskInput = { index: number } | { error: string }
 const PoolInstanceTest: typeof PoolInstance = PoolInstanceTestBuilder(PoolInstance)
 
 function testPoolFlow({
+    taskGeneralExecuteAttempts,
     poolCount,
     flowName,
     getClassConstructor,
 }: {
+    taskGeneralExecuteAttempts: number,
     poolCount: number,
     flowName: string,
     getClassConstructor: (options: { manager: PoolManager }) => PoolInstance,
@@ -47,6 +50,7 @@ function testPoolFlow({
 
         beforeEach(async () => {
             poolManager = new PoolManager({
+                taskGeneralExecuteAttempts,
                 poolInitQueueSize: Math.floor(Math.sqrt(poolCount)),
             })
 
@@ -76,6 +80,14 @@ function testPoolFlow({
             shuffleArray(tasks);
             await executeTasks(tasks);
         })
+
+        // test does not work properly with child process
+        if (flowName === 'base')
+            test(`${getTaskCount()} mixed tasks should succeed`, async () => {
+                const tasks: TaskInput[] = prepareTasks(getTaskCount(), index => ({ index, maxTry: taskGeneralExecuteAttempts }))
+                shuffleArray(tasks);
+                await executeTasks(tasks);
+            })
 
         afterEach(async () => {
             expect(poolManager.freePools.length).toBe(poolCount)
@@ -119,16 +131,22 @@ const testLevels = {
     poolCountList: [
         1,
         2,
-        5,
-        15,
+        // 5,
+    ],
+    taskGeneralExecuteAttemptsList: [
+        1,
+        3,
     ],
 }
 
 testLevels.flowParamsList.forEach(flowParams => {
     testLevels.poolCountList.forEach(poolCount => {
-        testPoolFlow({
-            poolCount,
-            ...flowParams
+        testLevels.taskGeneralExecuteAttemptsList.forEach(taskGeneralExecuteAttempts => {
+            testPoolFlow({
+                taskGeneralExecuteAttempts,
+                poolCount,
+                ...flowParams
+            })
         })
     })
 })

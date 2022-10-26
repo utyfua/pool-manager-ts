@@ -68,8 +68,6 @@ export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance
 
         const task = new PoolTask<Result>(this, taskContent, options);
 
-        this.distributeQueuedTasks()
-
         return task
     }
 
