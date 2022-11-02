@@ -1,11 +1,31 @@
-import { PoolInstance, PoolInstanceState, PoolTaskMini } from "../Pool";
-import { RpcManager, RpcManagerDestination } from "../RpcManager";
+import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolInstanceStatus, PoolTaskMini } from "../Pool";
+import { possiblyErrorObjectify } from "../possiblyErrorPlainObjectify";
+import { RpcManager, RpcManagerDestination, RpcMessage } from "../RpcManager";
 import { ProcessPoolRpcId } from "./types";
 
 let secondCallDetector = false;
 
-export class ProcessPoolChildInstance extends PoolInstance {
+export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance<PoolInstanceState> {
     rpcManager: RpcManager
+
+    private _latestError: any;
+    getState(): Promise<PoolInstanceState>;
+    getState(options: { sync: true }): PoolInstanceState;
+    getState(options: { sync?: boolean } = {}): PoolInstanceState | Promise<PoolInstanceState> {
+        if (options.sync) throw new Error('sync is not supported here')
+        return this.rpcManager.request({ action: 'getState' }).then(state => {
+            if (state.error) state.error = this._latestError;
+            return state;
+        })
+    }
+    async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]) {
+        if (key === 'error') {
+            this._latestError = value;
+            value = possiblyErrorObjectify({ error: value }) as any;
+        }
+        await this.rpcManager.request({ action: 'setState', key, value })
+    }
+
     constructor({ executeTask }: { executeTask?: (task: PoolTaskMini) => any } = {}) {
         super();
         if (executeTask)
@@ -24,10 +44,11 @@ export class ProcessPoolChildInstance extends PoolInstance {
                         attempts: message.attempts,
                     })
 
-                    if (this.state === PoolInstanceState.free)
+                    const state = await this.getState()
+                    if (state.status === PoolInstanceStatus.free)
                         return { success: true };
 
-                    if (this.stateError) throw this.stateError;
+                    if (state.error) throw state.error;
                     throw new Error('Unknown state');
                 }
 
@@ -36,7 +57,13 @@ export class ProcessPoolChildInstance extends PoolInstance {
                         taskContent: message.taskContent,
                     });
                 }
+
+                return this.userRpcMessageHandler(message)
             }
         })
+    }
+
+    userRpcMessageHandler(message: RpcMessage) {
+        return
     }
 }

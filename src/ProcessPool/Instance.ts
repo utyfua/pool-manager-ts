@@ -1,13 +1,14 @@
 import { ChildProcess, fork } from 'node:child_process'
-import { PoolInstance, PoolTaskMini } from "../Pool";
+import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolTaskMini } from "../Pool";
+import { possiblyErrorPlainParse } from '../possiblyErrorPlainObjectify';
 import { RpcManager, RpcMessage } from '../RpcManager';
 import { ProcessPoolInstanceOptions, ProcessPoolRpcId } from './types';
 
-export class ProcessPoolInstance extends PoolInstance {
+export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance {
     childProcess?: ChildProcess;
     rpcManager?: RpcManager;
-    options: ProcessPoolInstanceOptions;
-    constructor(options: Partial<ProcessPoolInstanceOptions> & Pick<ProcessPoolInstanceOptions, 'forkModulePath'>) {
+    options: ProcessPoolInstanceOptions<PoolInstanceState>;
+    constructor(options: Partial<ProcessPoolInstanceOptions<PoolInstanceState>> & Pick<ProcessPoolInstanceOptions<PoolInstanceState>, 'forkModulePath'>) {
         super(options);
         this.options = Object.assign({
             killMode: 'kill',
@@ -25,6 +26,15 @@ export class ProcessPoolInstance extends PoolInstance {
             destination: childProcess,
             rpcId: ProcessPoolRpcId,
             handler: (message) => {
+                if (message.action === 'getState') {
+                    return this.getState()
+                }
+                if (message.action === 'setState') {
+                    if (message.key === 'error') {
+                        message.value = possiblyErrorPlainParse(message.value, { doNotThrow: true })
+                    }
+                    return this.setState(message.key, message.value)
+                }
                 return this.userRpcMessageHandler(message)
             },
         })
@@ -105,8 +115,8 @@ export class ProcessPoolInstance extends PoolInstance {
 
         // in case if process still alive for some reason
         if (!error && !this.options.skipKilledCheck &&
-            childProcess.signalCode === null && 
-            childProcess.exitCode === null && 
+            childProcess.signalCode === null &&
+            childProcess.exitCode === null &&
             !childProcess.killed
         ) {
             error = new Error(`Process with pid ${pid} still alive but should be killed by now using "${killMode}" mode`)

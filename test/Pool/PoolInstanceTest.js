@@ -1,6 +1,6 @@
 const { initAttempts, random, randomSleep } = require('./utils');
 
-const maxTrySymbol = Symbol('maxTrySymbol')
+const maxTryMap = new Map()
 
 function PoolInstanceTestBuilder(classObj) {
     class PoolInstanceTest extends classObj {
@@ -19,13 +19,15 @@ function PoolInstanceTestBuilder(classObj) {
             await randomSleep();
 
             if (taskContent.maxTry) {
-                if (!(maxTrySymbol in taskContent))
-                    taskContent[maxTrySymbol] = taskContent.maxTry;
-                taskContent[maxTrySymbol]--;
-                if (taskContent[maxTrySymbol]) {
+                let tryLeft = maxTryMap.get(taskContent)
+                if (tryLeft === undefined) tryLeft = taskContent.maxTry;
+                tryLeft--;
+                maxTryMap.set(taskContent, tryLeft)
+                if (tryLeft > 0) {
                     throw new Error('We should try once more for success')
                 }
-                delete taskContent[maxTrySymbol];
+                if (tryLeft)
+                    return { error: 'should not be here!' }
             }
 
             if ('index' in taskContent) {

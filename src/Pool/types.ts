@@ -50,9 +50,15 @@ export interface PoolTaskOptions {
     generalAttempts?: number,
 }
 
-export interface PoolInstanceOptions {
+export type PoolInstanceBaseState = {
+    instanceName: string;
+    status: PoolInstanceStatus,
+    error?: any,
+}
+export type PoolInstanceDefaultState = PoolInstanceBaseState
+export interface PoolInstanceOptions<PoolInstanceState> {
     manager?: PoolManager,
-    poolInstanceName?: string | number;
+    userState?: Partial<PoolInstanceState>,
 }
 
 export interface PoolInstance_InitOptions {
@@ -60,7 +66,7 @@ export interface PoolInstance_InitOptions {
     onerror?: (pool: PoolInstance, error: Error | any) => void
 }
 
-export enum PoolInstanceState {
+export enum PoolInstanceStatus {
     'initQueue' = 'initQueue',
     'initStarting' = 'initStarting',
     'initFailed' = 'initFailed',

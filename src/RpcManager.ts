@@ -1,4 +1,5 @@
 import { setTimeout } from "node:timers/promises";
+import { possiblyErrorObjectifyPromise, PossiblyErrorObjectifyType, possiblyErrorPlainParse } from "./possiblyErrorPlainObjectify";
 import { TimeoutValue } from "./utils";
 
 export interface RpcMessageBase {
@@ -10,22 +11,9 @@ export interface RpcMessageRequest extends RpcMessageBase {
     message: any,
 }
 
-export interface RpcMessageResponseMessageResult {
-    type: 'result',
-    result: any
-}
-
-export interface RpcMessageResponseMessageError {
-    type: 'error',
-    error: any,
-    isPlainObject?: boolean
-}
-
-export type RpcMessageResponseMessage = RpcMessageResponseMessageResult | RpcMessageResponseMessageError;
-
 export interface RpcMessageResponse extends RpcMessageBase {
     action: 'response';
-    message: RpcMessageResponseMessage,
+    message: PossiblyErrorObjectifyType,
 }
 
 export type RpcMessage = RpcMessageRequest | RpcMessageResponse
@@ -88,31 +76,11 @@ export class RpcManager {
         if (typeof message !== 'object' || message.rpcId !== this.options.rpcId) return;
 
         if (message.action === 'request') {
-            const resultMessage = {
-                type: 'result' as 'result',
-                result: null
-            }
             const responseMessage: RpcMessage = {
                 rpcId: this.options.rpcId,
                 rpcMessageId: message.rpcMessageId,
                 action: 'response',
-                message: resultMessage
-            }
-            try {
-                resultMessage.result = await this.options.handler(message.message)
-            } catch (error) {
-                if (error instanceof Error) {
-                    responseMessage.message = {
-                        type: 'error',
-                        error: error.stack,
-                    }
-                } else {
-                    responseMessage.message = {
-                        type: 'error',
-                        error,
-                        isPlainObject: true,
-                    }
-                }
+                message: await possiblyErrorObjectifyPromise(this.options.handler(message.message))
             }
             this.options.destination.send(responseMessage);
         }
@@ -124,7 +92,7 @@ export class RpcManager {
         }
     }
 
-    responseCallbacks: Record<string, (message: RpcMessageResponseMessage) => void> = {};
+    responseCallbacks: Record<string, (message: PossiblyErrorObjectifyType) => void> = {};
     async request<Response = any>(
         message: any,
         { timeout = this.options.requestTimeout }:
@@ -141,7 +109,7 @@ export class RpcManager {
         destination.send(requestMessage);
 
         const promises = [
-            new Promise<RpcMessageResponseMessage>((cb) => {
+            new Promise<PossiblyErrorObjectifyType>((cb) => {
                 this.responseCallbacks[requestMessage.rpcMessageId] = cb
             })
         ]
@@ -157,13 +125,7 @@ export class RpcManager {
 
         delete this.responseCallbacks[requestMessage.rpcMessageId];
 
-        if (response.type === 'result')
-            return response.result;
-        else {
-            let error = response.error;
-            if (!response.isPlainObject) error = new Error(error)
-            throw error;
-        }
+        return possiblyErrorPlainParse(response);
     }
 
     closeHandler() {

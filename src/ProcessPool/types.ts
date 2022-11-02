@@ -5,7 +5,7 @@ import { TimeoutValue } from '../utils';
 
 export const ProcessPoolRpcId = 'ProcessPoolMessagingId';
 
-export interface ProcessPoolInstanceOptions extends PoolInstanceOptions {
+export interface ProcessPoolInstanceOptions<PoolInstanceState> extends PoolInstanceOptions<PoolInstanceState> {
     forkModulePath: string;
     forkArgs?: readonly string[] | undefined;
     forkOptions?: ForkOptions | undefined;

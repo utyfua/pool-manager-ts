@@ -59,8 +59,9 @@ export async function setupPoolManagerPrometheusMetricsV0({
             // todo: rework gauge collecting
             const poolStates = Object.fromEntries(
                 poolManager.poolList.map((pool) => [
-                    pool.poolInstanceName,
-                    pool.state,
+                    // todo: async!
+                    pool.getStateSync().instanceName,
+                    pool.getStateSync().status,
                 ])
             );
             const statusCounted = {};

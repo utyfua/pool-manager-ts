@@ -21,7 +21,9 @@ function testPoolFlow({
     flowName: string,
     getClassConstructor: (options: { manager: PoolManager }) => PoolInstance,
 }) {
-    describe(`${flowName} flow with ${poolCount} pools`, () => {
+    let testName = `${flowName} flow with ${poolCount} pools`;
+    if (taskGeneralExecuteAttempts) testName += ' taskGeneralExecuteAttempts=' + taskGeneralExecuteAttempts;
+    describe(testName, () => {
         let poolManager: PoolManager;
 
         function getTaskCount(dem: number = 1) {
@@ -58,8 +60,11 @@ function testPoolFlow({
             await poolManager.startPools({
                 pools,
                 attempts: initAttempts,
+                onerror: (pool, error)=>{
+                    console.error(error)
+                }
             })
-            expect(pools.map(pool => pool.stateError).filter(stateError => stateError)).toEqual([])
+            expect(pools.map(pool => pool.getStateSync().error).filter(stateError => stateError)).toEqual([])
         })
 
         test(`${getTaskCount()} success tasks`, async () => {
@@ -84,7 +89,10 @@ function testPoolFlow({
         // test does not work properly with child process
         if (flowName === 'base')
             test(`${getTaskCount()} mixed tasks should succeed`, async () => {
-                const tasks: TaskInput[] = prepareTasks(getTaskCount(), index => ({ index, maxTry: taskGeneralExecuteAttempts }))
+                const tasks: TaskInput[] = prepareTasks(getTaskCount(), index => ({
+                    index,
+                    maxTry: Math.ceil(Math.random() * taskGeneralExecuteAttempts)
+                }))
                 shuffleArray(tasks);
                 await executeTasks(tasks);
             })
@@ -131,7 +139,6 @@ const testLevels = {
     poolCountList: [
         1,
         2,
-        // 5,
     ],
     taskGeneralExecuteAttemptsList: [
         1,

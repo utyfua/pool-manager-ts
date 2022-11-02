@@ -1,61 +1,72 @@
 import EventEmitter from 'events'
 import { retryUponError } from "../retryUponError";
 import type { PoolManager } from "./Manager";
-import { PoolInstanceOptions, PoolInstanceState, PoolInstance_InitOptions, PoolTaskMini } from "./types";
+import {
+    PoolInstanceBaseState, PoolInstanceDefaultState,
+    PoolInstanceOptions, PoolInstanceStatus,
+    PoolInstance_InitOptions,
+    PoolTaskMini
+} from "./types";
 
 type ErrorType = Error | any;
 
-export class PoolInstance extends EventEmitter {
+let aiForInstanceName = 0;
+
+export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends EventEmitter {
     manager?: PoolManager;
-    poolInstanceName: string;
-    constructor(options: PoolInstanceOptions = {}) {
+    constructor(options: PoolInstanceOptions<PoolInstanceBaseState> = {}) {
         super();
         this.manager = options.manager;
-        this.poolInstanceName = `${options.poolInstanceName || Date.now()}`;
-
+        if (options.userState)
+            Object.assign(this.__state, options.userState)
         this.manager?.poolList.push(this);
     }
 
-    /**
-     * 
-     * @internal
-     */
-    _stateError?: ErrorType;
-    get stateError() {
-        return this._stateError;
+    /** @internal */
+    __state: PoolInstanceState = {
+        instanceName: `PoolInstance-${aiForInstanceName++}`,
+        status: PoolInstanceStatus.initStarting,
+    } as PoolInstanceState;
+    getState(): Promise<PoolInstanceState>;
+    getState(options: { sync: true }): PoolInstanceState;
+    getState(options: { sync?: boolean } = {}): PoolInstanceState | Promise<PoolInstanceState> {
+        if (options.sync)
+            return this.__state;
+        return Promise.resolve(this.__state)
     }
-    set stateError(error) {
-        this._stateError = error;
-        this.state = this.state.includes('init') ?
-            PoolInstanceState.initFailed :
-            PoolInstanceState.failed;
+    getStateSync() {
+        return this.getState({ sync: true })
     }
-
-    /**
-     * 
-     * @internal
-     */
-    _state?: PoolInstanceState;
-    get state(): PoolInstanceState {
-        return this._state || PoolInstanceState.initQueue
-    }
-    set state(state: PoolInstanceState) {
-        const oldState = this._state
-        if (oldState === state) return;
-        this.emit('state', state)
-
-        if (![PoolInstanceState.failed, PoolInstanceState.initFailed].includes(state)) {
-            this._stateError = undefined;
+    async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]): Promise<void>
+    async setState<T extends keyof PoolInstanceBaseState>(key: T, value: PoolInstanceBaseState[T]): Promise<void>
+    async setState<T extends keyof PoolInstanceBaseState>(key: T, value: PoolInstanceBaseState[T]): Promise<void> {
+        if ('error' === key) {
+            this.__state.error = value
+            await this.setState('status', this.getStateSync().status.includes('init') ?
+                PoolInstanceStatus.initFailed :
+                PoolInstanceStatus.failed)
+        } else if ('status' === key) {
+            const oldStatus = this.__state.status;
+            this.__state.status = value
+            this._onChangeStateStatus(oldStatus, value)
+        } else {
+            this.__state[key] = value
         }
+    }
+    private _onChangeStateStatus(oldStatus: PoolInstanceStatus, status: PoolInstanceStatus) {
+        if (oldStatus === status) return;
+        this.emit('status', status)
 
-        this._state = state;
+        if (this.__state.error && ![PoolInstanceStatus.failed, PoolInstanceStatus.initFailed].includes(status)) {
+            this.__state.error = undefined
+        }
 
         // do not proceed if we haven't manager, so no need to manage
         if (!this.manager) return;
 
         // remove pool from old the manager' state array
         let removeTarget: PoolInstance[] | undefined;
-        if (oldState === PoolInstanceState.free) {
+        if (oldStatus === PoolInstanceStatus.free) {
             removeTarget = this.manager.freePools;
         }
         if (removeTarget) {
@@ -64,31 +75,22 @@ export class PoolInstance extends EventEmitter {
         }
 
         // handle free pool
-        if (state === PoolInstanceState.free) {
+        if (status === PoolInstanceStatus.free) {
             this.manager.freePools.push(this);
             this.manager.distributeQueuedTasks();
 
-            if (this.state === PoolInstanceState.free) {
+            if (this.__state.status === PoolInstanceStatus.free) {
+                this.emit('free')
                 this.manager.emit('freePool', this)
             }
         }
     }
 
-    /**
-     * @deprecated
-     */
-    get poolStatus() {
-        return {
-            state: this.state,
-            error: this.stateError,
-        }
-    }
-
     get isAlive() {
-        return [PoolInstanceState.free, PoolInstanceState.running].includes(this.state)
+        return [PoolInstanceStatus.free, PoolInstanceStatus.running].includes(this.__state.status)
     }
     get isFree() {
-        return [PoolInstanceState.free].includes(this.state)
+        return [PoolInstanceStatus.free].includes(this.__state.status)
     }
 
     async start(): Promise<void> { }
@@ -98,15 +100,15 @@ export class PoolInstance extends EventEmitter {
      */
     async _start(options: PoolInstance_InitOptions) {
         try {
-            this.state = PoolInstanceState.initStarting;
+            await this.setState('status', PoolInstanceStatus.initStarting);
             await retryUponError({
                 func: () => this.start(),
                 attempts: options.attempts,
             });
-            this.state = PoolInstanceState.free;
+            await this.setState('status', PoolInstanceStatus.free);
         } catch (error) {
+            await this.setState('error', error);
             options.onerror && options.onerror(this, error)
-            this.stateError = error;
         }
     }
 
@@ -118,8 +120,8 @@ export class PoolInstance extends EventEmitter {
      * @param task was passed to `executeTask`
      * @param result by `executeTask`
      */
-    executeTaskOnResult(task: PoolTaskMini, result: { error: ErrorType } | { response: any }) {
-        this.state = PoolInstanceState.free;
+    async executeTaskOnResult(task: PoolTaskMini, result: { error: ErrorType } | { response: any }) {
+        await this.setState('status', PoolInstanceStatus.free);
     }
 
     /**
@@ -137,7 +139,7 @@ export class PoolInstance extends EventEmitter {
      */
     async _executeTask(task: PoolTaskMini): Promise<any> {
         try {
-            this.state = PoolInstanceState.running;
+            await this.setState('status', PoolInstanceStatus.running);
 
             const response = await this.executeTask(task)
 
