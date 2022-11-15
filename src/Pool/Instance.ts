@@ -4,7 +4,6 @@ import type { PoolManager } from "./Manager";
 import {
     PoolInstanceBaseState, PoolInstanceDefaultState,
     PoolInstanceOptions, PoolInstanceStatus,
-    PoolInstance_InitOptions,
     PoolTaskMini
 } from "./types";
 
@@ -14,7 +13,7 @@ let aiForInstanceName = 0;
 
 export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends EventEmitter {
     manager?: PoolManager;
-    constructor(options: PoolInstanceOptions<PoolInstanceBaseState> = {}) {
+    constructor(options: PoolInstanceOptions<PoolInstanceState> = {}) {
         super();
         this.manager = options.manager;
         if (options.userState)
@@ -98,18 +97,22 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
      * 
      * @internal
      */
-    async _start(options: PoolInstance_InitOptions) {
+    async _start() {
         try {
             await this.setState('status', PoolInstanceStatus.initStarting);
             await retryUponError({
                 func: () => this.start(),
-                attempts: options.attempts,
+                attempts: this.manager?.options.poolInitAttempts,
             });
             await this.setState('status', PoolInstanceStatus.free);
         } catch (error) {
             await this.setState('error', error);
-            options.onerror && options.onerror(this, error)
+            this.manager?.options.poolInitOnError(error, this)
         }
+    }
+
+    async restart() {
+        throw new Error('Please set restart by yourself')
     }
 
     /**

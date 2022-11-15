@@ -55,6 +55,10 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         await this.killProcess(childProcess, rpcManager);
     }
 
+    async restart() {
+        await this._start();
+    }
+
     /**
      * Kill process using `childProcess.kill`
      * @returns Error if happened

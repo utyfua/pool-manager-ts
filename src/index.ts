@@ -1,6 +1,7 @@
 export * from './Pool'
 export * from './ProcessPool'
 export * from './PrometheusMetrics/v0'
+export * from './limitedThreadFunction'
 export * from './parallelPromiseLoop'
 export * from './parallelPromiseArrayLoop'
 export * from './possiblyErrorPlainObjectify'

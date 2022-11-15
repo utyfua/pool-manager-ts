@@ -1,4 +1,4 @@
-import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolInstanceStatus, PoolTaskMini } from "../Pool";
+import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolTaskMini } from "../Pool";
 import { possiblyErrorObjectify } from "../possiblyErrorPlainObjectify";
 import { RpcManager, RpcManagerDestination, RpcMessage } from "../RpcManager";
 import { ProcessPoolRpcId } from "./types";
@@ -40,16 +40,7 @@ export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBase
             rpcId: ProcessPoolRpcId,
             handler: async (message) => {
                 if (message.action === 'start') {
-                    await this._start({
-                        attempts: message.attempts,
-                    })
-
-                    const state = await this.getState()
-                    if (state.status === PoolInstanceStatus.free)
-                        return { success: true };
-
-                    if (state.error) throw state.error;
-                    throw new Error('Unknown state');
+                    await this.start()
                 }
 
                 if (message.action === 'executeTask') {

@@ -1,19 +1,22 @@
-const { initAttempts, random, randomSleep } = require('./utils');
+const { poolInitAttempts, random, randomSleep } = require('./utils');
 
 const maxTryMap = new Map()
 
 function PoolInstanceTestBuilder(classObj) {
     class PoolInstanceTest extends classObj {
-        testInitAttempts = random(-5, initAttempts);
+        testInitAttempts = random(-5, poolInitAttempts);
         async start() {
             await randomSleep()
             this.testInitAttempts--;
             if (this.testInitAttempts <= 0) {
+                this.started = true;
                 return;
             }
             throw new Error('Init error test');
         }
         async executeTask({ taskContent }) {
+            if (!this.started)
+                throw new Error('We should be started for now!')
             if (this.testInitAttempts > 0)
                 throw new Error('Startup did not success first')
             await randomSleep();

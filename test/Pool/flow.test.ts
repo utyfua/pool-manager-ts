@@ -4,7 +4,7 @@
 import { PoolManager, PoolInstance, PoolTaskOptions, ProcessPoolInstance } from '../../dist/'
 import { shuffleArray } from '../utils';
 import { PoolInstanceTestBuilder } from './PoolInstanceTest.js';
-import { initAttempts } from './utils.js'
+import { poolInitAttempts } from './utils.js'
 
 type TaskInput = { index: number } | { error: string }
 // @ts-ignore
@@ -52,6 +52,7 @@ function testPoolFlow({
 
         beforeEach(async () => {
             poolManager = new PoolManager({
+                poolInitAttempts,
                 taskGeneralExecuteAttempts,
                 poolInitQueueSize: Math.floor(Math.sqrt(poolCount)),
             })
@@ -59,10 +60,6 @@ function testPoolFlow({
             const pools = 'a'.repeat(poolCount).split('').map(() => getClassConstructor({ manager: poolManager }));
             await poolManager.startPools({
                 pools,
-                attempts: initAttempts,
-                onerror: (pool, error)=>{
-                    console.error(error)
-                }
             })
             expect(pools.map(pool => pool.getStateSync().error).filter(stateError => stateError)).toEqual([])
         })

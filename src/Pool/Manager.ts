@@ -1,7 +1,7 @@
 import EventEmitter from 'events'
 
 import { parallelPromiseArrayLoop } from '../parallelPromiseArrayLoop'
-import { PoolManagerOptions, DefaultPoolManagerOptions, PoolTaskOptions, PoolInstance_InitOptions } from './types';
+import { PoolManagerOptions, DefaultPoolManagerOptions, PoolTaskOptions } from './types';
 import { PoolTask } from './Task';
 import { PoolInstance } from './Instance'
 
@@ -17,13 +17,11 @@ export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance
         this.options = Object.assign({}, DefaultPoolManagerOptions, options)
     }
 
-    async startPools(options: { pools: PoolInstanceGeneric[] } & PoolInstance_InitOptions) {
-        options.attempts ??= this.options.poolInitAttempts;
-
+    async startPools(options: { pools: PoolInstanceGeneric[] }) {
         await parallelPromiseArrayLoop<PoolInstanceGeneric>({
             iterateArray: options.pools,
             statement: async (pool: PoolInstanceGeneric): Promise<void> => {
-                await pool._start(options);
+                await pool._start();
             },
             maxThreads: this.options.poolInitQueueSize,
         })

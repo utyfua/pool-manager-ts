@@ -21,6 +21,7 @@ export const defaultDistributeTasks: IDistributePoolTasks = (pools: PoolInstance
 export interface PoolManagerOptions {
     poolInitQueueSize: number;
     poolInitAttempts: number;
+    poolInitOnError: (error: Error | unknown, pool: PoolInstance) => void;
     distributeTasks: IDistributePoolTasks;
     taskQueueTimeout: TimeoutValue;
     taskGeneralExecuteAttempts: number;
@@ -31,6 +32,7 @@ export const DefaultPoolManagerOptions: PoolManagerOptions = {
     distributeTasks: defaultDistributeTasks,
     poolInitQueueSize: 1,
     poolInitAttempts: 1,
+    poolInitOnError: (error, pool) => console.error(error),
     taskQueueTimeout: null,
     taskGeneralExecuteAttempts: 1,
     taskPoolExecuteAttempts: 1,
@@ -59,11 +61,6 @@ export type PoolInstanceDefaultState = PoolInstanceBaseState
 export interface PoolInstanceOptions<PoolInstanceState> {
     manager?: PoolManager,
     userState?: Partial<PoolInstanceState>,
-}
-
-export interface PoolInstance_InitOptions {
-    attempts?: number | undefined,
-    onerror?: (pool: PoolInstance, error: Error | any) => void
 }
 
 export enum PoolInstanceStatus {
