@@ -70,6 +70,7 @@ export enum PoolInstanceStatus {
     'free' = 'free',
     'running' = 'running',
     'failed' = 'failed',
+    'killed' = 'killed',
 }
 
 export interface PoolTaskMini {

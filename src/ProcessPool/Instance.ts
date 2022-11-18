@@ -59,6 +59,11 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         await this._start();
     }
 
+    async kill() {
+        await super.kill();
+        await this.close();
+    }
+
     /**
      * Kill process using `childProcess.kill`
      * @returns Error if happened

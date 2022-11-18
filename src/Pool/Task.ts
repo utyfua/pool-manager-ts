@@ -3,6 +3,7 @@ import { retryUponError } from '../retryUponError';
 import type { PoolManager } from './Manager';
 import { PoolTaskResult, PoolTaskOptions, PoolTaskState } from './types';
 import type { PoolInstance } from './Instance'
+import { removeFromArray } from '../removeFromArray';
 
 export class PoolTask<Result = any> extends EventEmitter {
     pool?: PoolInstance;
@@ -44,15 +45,10 @@ export class PoolTask<Result = any> extends EventEmitter {
         this._state = state;
 
         // remove task from old the manager' state array
-        let removeTarget: PoolTask[] | undefined;
         if (oldState === PoolTaskState.queue) {
-            removeTarget = this.manager.queueTasks;
+            removeFromArray(this.manager.queueTasks, this)
         } else if (oldState === PoolTaskState.running) {
-            removeTarget = this.manager.runningTasks;
-        }
-        if (removeTarget) {
-            const taskIndex = removeTarget.indexOf(this)
-            if (taskIndex !== -1) removeTarget.splice(taskIndex, 1);
+            removeFromArray(this.manager.runningTasks, this)
         }
 
         // add task to the manager' state array

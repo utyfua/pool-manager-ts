@@ -1,4 +1,5 @@
 import EventEmitter from 'events'
+import { removeFromArray } from '../removeFromArray';
 import { retryUponError } from "../retryUponError";
 import type { PoolManager } from "./Manager";
 import {
@@ -41,7 +42,7 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
     async setState<T extends keyof PoolInstanceBaseState>(key: T, value: PoolInstanceBaseState[T]): Promise<void> {
         if ('error' === key) {
             this.__state.error = value
-            await this.setState('status', this.getStateSync().status.includes('init') ?
+            await this.setState('status', (await this.getState()).status.includes('init') ?
                 PoolInstanceStatus.initFailed :
                 PoolInstanceStatus.failed)
         } else if ('status' === key) {
@@ -63,14 +64,15 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
         // do not proceed if we haven't manager, so no need to manage
         if (!this.manager) return;
 
-        // remove pool from old the manager' state array
-        let removeTarget: PoolInstance[] | undefined;
-        if (oldStatus === PoolInstanceStatus.free) {
-            removeTarget = this.manager.freePools;
+        if (status === PoolInstanceStatus.killed) {
+            removeFromArray(this.manager.poolList, this)
+            removeFromArray(this.manager.freePools, this)
+            return;
         }
-        if (removeTarget) {
-            const taskIndex = removeTarget.indexOf(this)
-            if (taskIndex !== -1) removeTarget.splice(taskIndex, 1);
+
+        // remove pool from old the manager' state array
+        if (oldStatus === PoolInstanceStatus.free) {
+            removeFromArray(this.manager.freePools, this)
         }
 
         // handle free pool
@@ -90,6 +92,9 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
     }
     get isFree() {
         return [PoolInstanceStatus.free].includes(this.__state.status)
+    }
+    get isKilled() {
+        return [PoolInstanceStatus.killed].includes(this.__state.status)
     }
 
     async start(): Promise<void> { }
@@ -113,6 +118,9 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
 
     async restart() {
         throw new Error('Please set restart by yourself')
+    }
+    async kill() {
+        await this.setState('status', PoolInstanceStatus.killed);
     }
 
     /**
