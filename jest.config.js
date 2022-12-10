@@ -3,5 +3,5 @@ module.exports = {
   testTimeout: 5000,
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ["**/test/**/?(*.)+(spec|test).[jt]s?(x)"],
+  testMatch: ["**/(test|src)/**/?(*.)+(spec|test).[jt]s?(x)"],
 };

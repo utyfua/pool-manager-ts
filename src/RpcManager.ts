@@ -80,7 +80,7 @@ export class RpcManager {
                 rpcId: this.options.rpcId,
                 rpcMessageId: message.rpcMessageId,
                 action: 'response',
-                message: await possiblyErrorObjectifyPromise(this.options.handler(message.message))
+                message: await possiblyErrorObjectifyPromise(() => this.options.handler(message.message))
             }
             this.options.destination.send(responseMessage);
         }

@@ -1,6 +1,5 @@
-/// <reference path="../globals.d.ts" />
+import { describe, expect, beforeEach, test, afterEach } from '@jest/globals';
 
-// @ts-ignore
 import { PoolManager, PoolInstance, PoolTaskOptions, ProcessPoolInstance } from '../../dist/'
 import { shuffleArray } from '../utils';
 import { PoolInstanceTestBuilder } from './PoolInstanceTest.js';

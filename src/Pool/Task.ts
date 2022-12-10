@@ -27,7 +27,7 @@ export class PoolTask<Result = any> extends EventEmitter {
 
         // setup timeout
         if (typeof options.taskQueueTimeout === 'number') {
-            this._queueTimer = setTimeout(() => this.cancel('TIMEOUT'), options.taskQueueTimeout)
+            this._queueTimer = setTimeout(() => this.cancel('PoolTask got queue timeout'), options.taskQueueTimeout)
         }
 
         this.state = PoolTaskState.queue;
