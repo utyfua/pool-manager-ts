@@ -16,9 +16,12 @@ export async function setupPoolManagerPrometheusMetricsV0({
         queueTasksHelp = 'Number of tasks in queue',
         runningTasksName = 'running_tasks',
         runningTasksHelp = 'Number of tasks in work',
+        taskResultsName = 'task_result_total',
+        taskResultsHelp = 'Number of executed tasks',
         taskFlowSecondsTotalName = 'task_flow_seconds_total',
         taskFlowSecondsTotalHelp = 'Time spend on task queue and executing',
-    } = {}
+    } = {},
+    buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
 }: {
     registry?: Registry,
     registers?: Registry[],
@@ -35,9 +38,12 @@ export async function setupPoolManagerPrometheusMetricsV0({
         queueTasksHelp?: string,
         runningTasksName?: string,
         runningTasksHelp?: string,
+        taskResultsName?: string,
+        taskResultsHelp?: string,
         taskFlowSecondsTotalName?: string,
         taskFlowSecondsTotalHelp?: string,
     },
+    buckets?: number[] | undefined
 }) {
     if (taskLabelNames?.includes(taskStatusLabel))
         throw new Error(`Label name ${taskStatusLabel} in taskLabelNames is reserved by package, ` +
@@ -45,7 +51,7 @@ export async function setupPoolManagerPrometheusMetricsV0({
     taskLabelNames ??= [];
     taskLabelNames?.push(taskStatusLabel)
 
-    const { Gauge, Histogram, register: defaultRegister } = await import('prom-client');
+    const { Counter, Gauge, Histogram, register: defaultRegister } = await import('prom-client');
     if (registry) registers?.push(registry)
     registers ??= registry ? [registry] : [defaultRegister]
 
@@ -93,19 +99,29 @@ export async function setupPoolManagerPrometheusMetricsV0({
         },
     })
 
+    const taskResultsCounter = new Counter({
+        name: `${metricPrefix}${taskResultsName}`,
+        help: taskResultsHelp,
+        registers,
+        labelNames: taskLabelNames,
+    });
+
     const taskFlowSecondsTotalHistogram = new Histogram({
         name: `${metricPrefix}${taskFlowSecondsTotalName}`,
         help: taskFlowSecondsTotalHelp,
         registers,
         labelNames: taskLabelNames,
+        buckets,
     });
 
     poolManager.on('taskInit', (task: PoolTask) => {
         let _end = taskFlowSecondsTotalHistogram.startTimer();
-        const end = (status: string) => {
+        const end = (status: 'queue' | 'canceled' | 'success' | 'failed') => {
             const labels = taskLabelExtractor && taskLabelExtractor(task) || {};
             labels[taskStatusLabel] = status
             _end(labels)
+            if (status !== 'queue')
+                taskResultsCounter.inc(labels);
         }
         let executeListener = () => {
             end('queue');
@@ -125,6 +141,7 @@ export async function setupPoolManagerPrometheusMetricsV0({
         instanceStatusGauge,
         queueTasksGauge,
         runningTasksGauge,
+        taskResultsCounter,
         taskFlowSecondsTotalHistogram,
     }
 }
