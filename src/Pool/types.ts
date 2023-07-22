@@ -1,8 +1,9 @@
 
+import type EventEmitter from 'events';
 import type { PoolTask } from './Task'
 import type { PoolInstance } from './Instance'
 import type { PoolManager } from './Manager';
-import { TimeoutValue } from '../utils';
+import type { TimeoutValue } from '../utils';
 
 export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance | null, PoolTask];
 
@@ -38,6 +39,13 @@ export const DefaultPoolManagerOptions: PoolManagerOptions = {
     taskPoolExecuteAttempts: 1,
 };
 
+export interface BaseTaskManager extends EventEmitter {
+    queueTasks: PoolTask[];
+    runningTasks: PoolTask[];
+    distributeQueuedTasks(): void
+    freePools?: PoolInstance[];
+}
+
 export enum PoolTaskState {
     queue = 'queue',
     running = 'running',
@@ -47,6 +55,7 @@ export enum PoolTaskState {
 
 export interface PoolTaskOptions {
     pool?: PoolInstance,
+    isPoolSpecified?: boolean,
     taskQueueTimeout?: TimeoutValue,
     poolAttempts?: number,
     generalAttempts?: number,

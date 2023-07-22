@@ -82,7 +82,11 @@ export class RpcManager {
                 action: 'response',
                 message: await possiblyErrorObjectifyPromise(() => this.options.handler(message.message))
             }
-            this.options.destination.send(responseMessage);
+            try {
+                this.options.destination.send(responseMessage);
+            } catch (error) {
+                this.onUnhandledError(error)
+            }
         }
 
         if (message.action === 'response') {
@@ -128,9 +132,14 @@ export class RpcManager {
         return possiblyErrorPlainParse(response);
     }
 
+    onUnhandledError(error: unknown) {
+        // any unhandled error will be thrown here
+    }
+
     closeHandler() {
         this.destroy();
     }
+
     destroy() {
         const destination = this.options.destination
         destination.off('message', this.messageHandler)

@@ -1,12 +1,15 @@
 import EventEmitter from 'events';
 import { retryUponError } from '../retryUponError';
-import type { PoolManager } from './Manager';
-import { PoolTaskResult, PoolTaskOptions, PoolTaskState } from './types';
+import { PoolTaskResult, PoolTaskOptions, PoolTaskState, BaseTaskManager } from './types';
 import type { PoolInstance } from './Instance'
 import { removeFromArray } from '../removeFromArray';
 
-export class PoolTask<Result = any> extends EventEmitter {
+export class PoolTask<
+    Result = any,
+    Manager extends BaseTaskManager = BaseTaskManager
+> extends EventEmitter {
     pool?: PoolInstance;
+    isPoolSpecified?: boolean;
     generalAttempts?: number;
     poolAttempts?: number;
     result?: PoolTaskResult<Result>;
@@ -14,10 +17,12 @@ export class PoolTask<Result = any> extends EventEmitter {
     promise: Promise<PoolTaskResult<Result>>;
     _queueTimer?: NodeJS.Timeout;
 
-    constructor(public manager: PoolManager, public taskContent: any, options: PoolTaskOptions = {}) {
+    constructor(public manager: Manager, public taskContent: any, options: PoolTaskOptions = {}) {
         super();
 
         // assign options
+        if (options.isPoolSpecified !== false && options.pool)
+            options.isPoolSpecified = true;
         Object.assign(this, options)
 
         // setup promises
@@ -71,7 +76,9 @@ export class PoolTask<Result = any> extends EventEmitter {
      */
     resolve(result: PoolTaskResult, state: PoolTaskState = PoolTaskState.finished): void {
         if (this.generalAttempts !== undefined) this.generalAttempts--;
-        if (state === PoolTaskState.finished && result[0] && this.generalAttempts) {
+        if (state === PoolTaskState.finished && result[0] && (this.generalAttempts || 0) > 0) {
+            if (this.pool && !this.isPoolSpecified)
+                this.pool = undefined;
             this.state = PoolTaskState.queue;
             return;
         }
@@ -89,8 +96,11 @@ export class PoolTask<Result = any> extends EventEmitter {
      */
     execute(pool: PoolInstance): void {
         this.pool = pool;
-        const poolIndex = this.manager.freePools.indexOf(pool)
-        if (poolIndex !== -1) this.manager.freePools.splice(poolIndex, 1);
+
+        if (this.manager.freePools) {
+            const poolIndex = this.manager.freePools.indexOf(pool)
+            if (poolIndex !== -1) this.manager.freePools.splice(poolIndex, 1);
+        }
 
         if (this._queueTimer) {
             clearTimeout(this._queueTimer)
