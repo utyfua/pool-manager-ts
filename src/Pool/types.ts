@@ -1,9 +1,9 @@
 
 import type EventEmitter from 'events';
+import { TimeoutType } from 'ipc-bus-promise';
 import type { PoolTask } from './Task'
 import type { PoolInstance } from './Instance'
 import type { PoolManager } from './Manager';
-import type { TimeoutValue } from '../utils';
 
 export type PoolTaskResult<Result = any> = [Error | null, Result | null, PoolInstance | null, PoolTask];
 
@@ -24,7 +24,7 @@ export interface PoolManagerOptions {
     poolInitAttempts: number;
     poolInitOnError: (error: Error | unknown, pool: PoolInstance) => void;
     distributeTasks: IDistributePoolTasks;
-    taskQueueTimeout: TimeoutValue;
+    taskQueueTimeout: TimeoutType;
     taskGeneralExecuteAttempts: number;
     taskPoolExecuteAttempts: number;
 }
@@ -56,7 +56,7 @@ export enum PoolTaskState {
 export interface PoolTaskOptions {
     pool?: PoolInstance,
     isPoolSpecified?: boolean,
-    taskQueueTimeout?: TimeoutValue,
+    taskQueueTimeout?: TimeoutType,
     poolAttempts?: number,
     generalAttempts?: number,
 }

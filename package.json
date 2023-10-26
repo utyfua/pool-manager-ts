@@ -1,6 +1,6 @@
 {
   "name": "pool-manager",
-  "version": "4.4.1",
+  "version": "5.0.0",
   "description": "",
   "typings": "dist/index.d.ts",
   "main": "dist/index.cjs.js",
@@ -27,8 +27,12 @@
     "url": "https://github.com/utyfua/pool-manager-ts/issues"
   },
   "homepage": "https://github.com/utyfua/pool-manager-ts#readme",
+  "dependencies": {
+    "ipc-bus-promise": "^0.0.1"
+  },
   "peerDependencies": {
     "prom-client": "*",
+    "ipc-bus-promise": "^0.0.1",
     "tree-kill": "*"
   },
   "peerDependenciesMeta": {

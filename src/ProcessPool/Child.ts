@@ -1,19 +1,17 @@
+import { wrapInputAsResultOrError, ProcessIpcBus, Message } from "ipc-bus-promise";
 import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolTaskMini } from "../Pool";
-import { possiblyErrorObjectify } from "../possiblyErrorPlainObjectify";
-import { RpcManager, RpcManagerDestination, RpcMessage } from "../RpcManager";
-import { ProcessPoolRpcId } from "./types";
 
 let secondCallDetector = false;
 
 export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance<PoolInstanceState> {
-    rpcManager: RpcManager
+    ipcBus: ProcessIpcBus
 
     private _latestError: any;
     getState(): Promise<PoolInstanceState>;
     getState(options: { sync: true }): PoolInstanceState;
     getState(options: { sync?: boolean } = {}): PoolInstanceState | Promise<PoolInstanceState> {
         if (options.sync) throw new Error('sync is not supported here')
-        return this.rpcManager.request({ action: 'getState' }).then(state => {
+        return this.ipcBus.request({ action: 'getState' }).then(state => {
             if (state.error) state.error = this._latestError;
             return state;
         })
@@ -21,9 +19,9 @@ export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBase
     async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]) {
         if (key === 'error') {
             this._latestError = value;
-            value = possiblyErrorObjectify({ error: value }) as any;
+            value = wrapInputAsResultOrError({ error: value }) as any;
         }
-        await this.rpcManager.request({ action: 'setState', key, value })
+        await this.ipcBus.request({ action: 'setState', key, value })
     }
 
     constructor({ executeTask }: { executeTask?: (task: PoolTaskMini) => any } = {}) {
@@ -35,9 +33,8 @@ export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBase
             throw new Error('class ProcessPoolChild should be uniq per process');
         secondCallDetector = true;
 
-        this.rpcManager = new RpcManager({
-            destination: process as RpcManagerDestination,
-            rpcId: ProcessPoolRpcId,
+        this.ipcBus = new ProcessIpcBus({
+            process,
             handler: async (message) => {
                 if (message.action === 'start') {
                     await this.start()
@@ -54,7 +51,7 @@ export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBase
         })
     }
 
-    userRpcMessageHandler(message: RpcMessage) {
+    userRpcMessageHandler(message: Message) {
         return
     }
 }
