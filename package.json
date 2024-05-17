@@ -1,12 +1,13 @@
 {
   "name": "pool-manager",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "",
   "typings": "dist/index.d.ts",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "scripts": {
     "clean": "rimraf dist/*",

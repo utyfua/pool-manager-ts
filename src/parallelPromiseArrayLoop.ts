@@ -67,13 +67,15 @@ export async function parallelPromiseArrayLoop<Element extends any = any, Result
         condition: index => index < iterateArray.length,
         finalExpression: index => index + 1,
         statement: async (index) => {
-            const result = await statement(iterateArray[index], index, iterateArray)
+            const result = await statement(iterateArray[index], index, iterateArray);
             if (collectResults) collectedResponses[index] = result;
         },
-
         maxThreads,
-        attempts, onerror, retryStrategy,
-    })
+        attempts,
+        onerror,
+        retryStrategy,
+    });
+
     if (collectResults)
         return collectedResponses;
 }

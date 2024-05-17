@@ -39,31 +39,40 @@ export function parallelPromiseLoop<State>({
 }: parallelPromiseLoopOptions<State>): Promise<void> {
     let curThreads = 0;
     let loopState = initialization();
-    let nextThreadCallback: Function = () => 1;
+    let nextThreadCallback: (() => void) | null = null;
     let allInit: boolean = false;
-    return new Promise(async function (resolve, reject) {
-        for (; ;) {
-            if (!await condition(loopState)) break;
-            curThreads++;
+
+    return new Promise(async (resolve, reject) => {
+        const manageNextThreadCallback = async () => {
             if (curThreads > maxThreads) {
-                await new Promise(function (resolve) { nextThreadCallback = resolve });
+                await new Promise<void>((res) => nextThreadCallback = res);
+                nextThreadCallback = null; // Reset the callback to avoid memory leak
             }
-
-            retryUponError({
-                func: () => statement(loopState),
-                attempts, onerror, retryStrategy,
-            })
-                .then(() => {
-                    curThreads--;
-                    nextThreadCallback();
-                    allInit && !curThreads && resolve();
-                })
-                .catch(err => reject(err));
-
-            if (finalExpression)
-                loopState = finalExpression(loopState)
         };
-        !curThreads && resolve();
+
+        const processThread = async () => {
+            try {
+                await retryUponError({
+                    func: () => statement(loopState),
+                    attempts, onerror, retryStrategy,
+                });
+                curThreads--;
+                nextThreadCallback?.();
+                if (allInit && curThreads === 0) resolve();
+            } catch (err) {
+                reject(err);
+            }
+        };
+
+        while (await condition(loopState)) {
+            curThreads++;
+            await manageNextThreadCallback();
+            processThread();
+
+            if (finalExpression) loopState = finalExpression(loopState);
+        }
+
         allInit = true;
+        if (curThreads === 0) resolve();
     });
 }
