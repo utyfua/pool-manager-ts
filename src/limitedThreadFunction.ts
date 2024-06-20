@@ -26,7 +26,7 @@ export function limitedThreadFunction<F extends (...args: any[]) => Promise<any>
             reject(error);
         }
         const next = queue?.shift();
-        if (!queue.length) queue = null;
+        if (!queue?.length) queue = null;
         next && next();
     })
     return execute as F
