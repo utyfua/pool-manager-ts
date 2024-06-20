@@ -17,7 +17,7 @@ export function limitedThreadFunction<F extends (...args: any[]) => Promise<any>
     let queue: null | ((v?: 1) => void)[] = null;
 
     const execute = (...args: any[]) => new Promise(async (callback, reject) => {
-        if (queue) await new Promise(cb => queue?.push(cb) || (queue = [cb]));
+        if (queue) await new Promise(cb => queue ? queue.push(cb) : (queue = [cb]));
         if (!queue) queue = [];
         try {
             const result = await func(...args);
@@ -25,7 +25,7 @@ export function limitedThreadFunction<F extends (...args: any[]) => Promise<any>
         } catch (error) {
             reject(error);
         }
-        const next = queue.shift();
+        const next = queue?.shift();
         if (!queue.length) queue = null;
         next && next();
     })
