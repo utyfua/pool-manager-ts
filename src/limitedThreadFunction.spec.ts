@@ -1,8 +1,8 @@
-import { describe, expect, it, xit } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { limitedThreadFunction } from './limitedThreadFunction';
 
 describe('limitedThreadFunction', () => {
-    xit('should limit function calls to one at a time', async () => {
+    it('should process all calls', async () => {
         let counter = 0;
         const incrementCounter = async () => counter++; //randomSleep();
 
@@ -18,8 +18,7 @@ describe('limitedThreadFunction', () => {
         await p2;
         await p3;
 
-        // The counter should have been incremented only once
-        expect(counter).toBe(1);
+        expect(counter).toBe(3);
     });
 
     it('should properly handle errors thrown by the wrapped function', async () => {

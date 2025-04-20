@@ -1,11 +1,15 @@
-import { PoolManager, PoolTask, PoolTaskResult, PoolTaskState } from '../Pool';
 import type { Registry } from 'prom-client';
+import { PoolInstance, PoolManager, PoolTask, PoolTaskResult, PoolTaskState } from '../Pool';
 
 export async function setupPoolManagerPrometheusMetricsV0({
     registry,
     registers,
     poolManager,
     metricPrefix = 'lib_pool_manager_',
+    poolLabelNames = ['state'],
+    poolLabelExtractor = (pool) => ({
+        state: pool.getStateSync().status,
+    }),
     taskStatusLabel = 'status',
     taskLabelNames,
     taskLabelExtractor,
@@ -26,6 +30,8 @@ export async function setupPoolManagerPrometheusMetricsV0({
     registry?: Registry,
     registers?: Registry[],
     metricPrefix?: string,
+    poolLabelNames?: string[],
+    poolLabelExtractor?: (pool: PoolInstance) => Record<string, string | number>,
     taskStatusLabel?: string,
     taskLabelNames?: string[],
     taskLabelExtractor?: (task: PoolTask) => object,
@@ -55,28 +61,16 @@ export async function setupPoolManagerPrometheusMetricsV0({
     if (registry) registers?.push(registry)
     registers ??= registry ? [registry] : [defaultRegister]
 
-    let stateGaugeLabels: Set<string> = new Set([]);
     const instanceStatusGauge = new Gauge({
         name: `${metricPrefix}${instanceStatusName}`,
         help: instanceStatusHelp,
-        labelNames: ['state'],
+        labelNames: poolLabelNames,
         registers,
         collect() {
-            // todo: rework gauge collecting
-            const poolStates = Object.fromEntries(
-                poolManager.poolList.map((pool) => [
-                    // todo: async!
-                    pool.getStateSync().instanceName,
-                    pool.getStateSync().status,
-                ])
-            );
-            const statusCounted = {};
-            Object.values(poolStates).forEach(status =>
-                statusCounted[status] = (statusCounted[status] || 0) + 1)
-
-            stateGaugeLabels = new Set([...stateGaugeLabels, ...Object.keys(statusCounted)]);
-            stateGaugeLabels.forEach(label => {
-                this.labels(label).set(statusCounted[label] || 0)
+            this.reset();
+            poolManager.poolList.forEach((pool) => {
+                const labels = poolLabelExtractor(pool) ;
+                this.labels(labels).inc()
             })
         },
     });
@@ -84,18 +78,30 @@ export async function setupPoolManagerPrometheusMetricsV0({
     const queueTasksGauge = new Gauge({
         name: `${metricPrefix}${queueTasksName}`,
         help: queueTasksHelp,
+        labelNames: taskLabelNames,
         registers,
         collect() {
-            this.set(poolManager.queueTasks.length);
+            this.reset();
+            poolManager.queueTasks.forEach((task) => {
+                const labels = taskLabelExtractor?.(task) || {};
+                labels[taskStatusLabel] = task.state
+                this.labels(labels).inc()
+            })
         },
     })
 
     const runningTasksGauge = new Gauge({
         name: `${metricPrefix}${runningTasksName}`,
         help: runningTasksHelp,
+        labelNames: taskLabelNames,
         registers,
         collect() {
-            this.set(poolManager.runningTasks.length);
+            this.reset();
+            poolManager.runningTasks.forEach((task) => {
+                const labels = taskLabelExtractor?.(task) || {};
+                labels[taskStatusLabel] = task.state
+                this.labels(labels).inc()
+            })
         },
     })
 
@@ -117,7 +123,7 @@ export async function setupPoolManagerPrometheusMetricsV0({
     poolManager.on('taskInit', (task: PoolTask) => {
         let _end = taskFlowSecondsTotalHistogram.startTimer();
         const end = (status: 'queue' | 'canceled' | 'success' | 'failed') => {
-            const labels = taskLabelExtractor && taskLabelExtractor(task) || {};
+            const labels = taskLabelExtractor?.(task) || {};
             labels[taskStatusLabel] = status
             _end(labels)
             if (status !== 'queue')
