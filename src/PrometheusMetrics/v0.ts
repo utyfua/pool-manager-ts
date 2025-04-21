@@ -1,5 +1,6 @@
 import type { Registry } from 'prom-client';
 import { PoolInstance, PoolManager, PoolTask, PoolTaskResult, PoolTaskState } from '../Pool';
+import { collectGaugeData } from './v0GaugeUtil';
 
 export async function setupPoolManagerPrometheusMetricsV0({
     registry,
@@ -67,11 +68,7 @@ export async function setupPoolManagerPrometheusMetricsV0({
         labelNames: poolLabelNames,
         registers,
         collect() {
-            this.reset();
-            poolManager.poolList.forEach((pool) => {
-                const labels = poolLabelExtractor(pool) ;
-                this.labels(labels).inc()
-            })
+            collectGaugeData(this, poolLabelNames, poolManager.poolList, poolLabelExtractor);
         },
     });
 
@@ -81,11 +78,10 @@ export async function setupPoolManagerPrometheusMetricsV0({
         labelNames: taskLabelNames,
         registers,
         collect() {
-            this.reset();
-            poolManager.queueTasks.forEach((task) => {
+            collectGaugeData(this, taskLabelNames, poolManager.queueTasks, (task) => {
                 const labels = taskLabelExtractor?.(task) || {};
                 labels[taskStatusLabel] = task.state
-                this.labels(labels).inc()
+                return labels
             })
         },
     })
@@ -96,11 +92,10 @@ export async function setupPoolManagerPrometheusMetricsV0({
         labelNames: taskLabelNames,
         registers,
         collect() {
-            this.reset();
-            poolManager.runningTasks.forEach((task) => {
+            collectGaugeData(this, taskLabelNames, poolManager.runningTasks, (task) => {
                 const labels = taskLabelExtractor?.(task) || {};
                 labels[taskStatusLabel] = task.state
-                this.labels(labels).inc()
+                return labels
             })
         },
     })
