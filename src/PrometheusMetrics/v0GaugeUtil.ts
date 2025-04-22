@@ -26,6 +26,6 @@ export const collectGaugeData = <T>(
         const labels = labelExtractor(item);
         const labelKey = labelNames.map(name => labels[name]).join('|');
         labelsMemo.set(labelKey, labels);
-        gauge.set(labels, 1);
+        gauge.inc(labels, 1);
     };
 };

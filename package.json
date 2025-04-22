@@ -1,6 +1,6 @@
 {
   "name": "pool-manager",
-  "version": "6.0.1",
+  "version": "6.0.2",
   "description": "",
   "typings": "dist/index.d.ts",
   "main": "dist/index.js",
