@@ -61,24 +61,21 @@ function testPoolStart({
             })
             expect(result).toBe('rejected');
 
-            await Promise.all(poolManager.poolList.map(pool => {
-                // @ts-ignore
-                pool?.close?.();
-            }))
+            poolManager.poolList.forEach(pool => pool.kill());
         })
     })
 }
 
 function testPoolFlow({
-    taskGeneralExecuteAttempts,
-    poolCount,
     flowName,
     getClassConstructor,
+    taskGeneralExecuteAttempts,
+    poolCount,
 }: {
-    taskGeneralExecuteAttempts: number,
-    poolCount: number,
     flowName: string,
     getClassConstructor: (options: { manager: PoolManager }) => PoolInstance,
+    taskGeneralExecuteAttempts: number,
+    poolCount: number,
 }) {
     let testName = `${flowName} flow with ${poolCount} pools`;
     if (taskGeneralExecuteAttempts) testName += ' taskGeneralExecuteAttempts=' + taskGeneralExecuteAttempts;

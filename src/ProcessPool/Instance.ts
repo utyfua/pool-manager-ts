@@ -16,7 +16,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
     }
 
     async start() {
-        await this.close();
+        await this.kill();
 
         const childProcess = this.childProcess =
             fork(this.options.forkModulePath, this.options.forkArgs, this.options.forkOptions);
@@ -44,12 +44,17 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         )
     }
 
+    /**
+     * @deprecated probably you need `kill` method instead
+     * @internal
+     */
     async close() {
         const { childProcess, icpBus } = this;
         if (!childProcess || !icpBus) return;
         this.childProcess = undefined;
         this.icpBus = undefined;
 
+        icpBus.close()
         await this.killProcess(childProcess, icpBus);
     }
 

@@ -13,7 +13,6 @@
     "allowSyntheticDefaultImports": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": false,
-    "noUnusedLocals": true,
     "noUnusedParameters": false,
     "pretty": true,
     "stripInternal": true,

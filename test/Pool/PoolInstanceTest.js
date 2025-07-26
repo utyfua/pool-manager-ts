@@ -2,11 +2,12 @@ const { poolInitAttempts, random, randomSleep } = require('./utils');
 
 const maxTryMap = new Map()
 
-function PoolInstanceTestBuilder(classObj, { crushErrorStage } = {}) {
+function PoolInstanceTestBuilder(classObj, { crushErrorStage, doNotCrush } = {}) {
     class PoolInstanceTest extends classObj {
         testInitAttempts = random(-5, poolInitAttempts);
         async start() {
             await randomSleep()
+            if (doNotCrush) return;
             if (crushErrorStage === 'start') {
                 throw new Error('Start error test');
             }
