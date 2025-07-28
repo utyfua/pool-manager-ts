@@ -70,6 +70,11 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
             return;
         }
 
+        if (status === PoolInstanceStatus.closed) {
+            removeFromArray(this.manager.freePools, this)
+            return;
+        }
+
         // remove pool from old the manager' state array
         if (oldStatus === PoolInstanceStatus.free) {
             removeFromArray(this.manager.freePools, this)

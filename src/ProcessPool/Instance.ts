@@ -1,6 +1,6 @@
 import { unwrapResultOrError, ProcessIpcBus, Message } from 'ipc-bus-promise'
 import { ChildProcess, fork } from 'node:child_process'
-import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolTaskMini } from "../Pool";
+import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolInstanceStatus, PoolTaskMini } from "../Pool";
 import { ProcessPoolInstanceOptions } from './types';
 
 export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance {
@@ -44,13 +44,13 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         )
     }
 
-    /**
-     * @deprecated probably you need `kill` method instead
-     * @internal
-     */
-    async close() {
+    async close(killInstance?: boolean) {
         const { childProcess, icpBus } = this;
         if (!childProcess || !icpBus) return;
+        await this.setState('status',
+            killInstance ?
+                PoolInstanceStatus.killed :
+                PoolInstanceStatus.closed);
         this.childProcess = undefined;
         this.icpBus = undefined;
 
@@ -63,8 +63,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
     }
 
     async kill() {
-        await super.kill();
-        await this.close();
+        await this.close(true);
     }
 
     /**
