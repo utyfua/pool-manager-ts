@@ -19,6 +19,10 @@ function PoolInstanceTestBuilder(classObj, { crushErrorStage, doNotCrush } = {})
             throw new Error('Init error test');
         }
         async executeTask({ taskContent }) {
+            if (doNotCrush) {
+                if (taskContent.crush) throw new Error('Crush test');
+                return { payload: taskContent }
+            }
             if (!this.started)
                 throw new Error('We should be started for now!')
             if (this.testInitAttempts > 0)

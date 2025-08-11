@@ -4,3 +4,4 @@
 /package-lock.json
 /yarn.lock
 /pool-manager-*.tgz
+/*.heapsnapshot

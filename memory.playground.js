@@ -1,7 +1,8 @@
 // node --expose-gc --inspect memory.playground.js 
 const { PoolManager, ProcessPoolInstance } = require('./dist/index.js');
+const { writeHeapSnapshot } = require("v8");
 
-const timer = setInterval(() => { }, 1000);
+const timer = setInterval(() => { global.gc(); }, 1000);
 
 const poolManager = new PoolManager()
 const registry = new FinalizationRegistry((heldValue) => {
@@ -16,7 +17,7 @@ async function runMain() {
     forkArgs: ['doNotCrush']
   })
   const dummyObj = {}
-  registry.register(pool, 'pool', dummyObj);
+  registry.register(dummyObj, 'pool');
   await poolManager.startPools({
     pools: [pool],
   })
@@ -27,5 +28,6 @@ async function runMain() {
 (async () => {
   await runMain();
   global.gc();
+  writeHeapSnapshot();
 })();
 

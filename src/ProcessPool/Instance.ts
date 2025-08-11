@@ -16,7 +16,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
     }
 
     async start() {
-        await this.kill();
+        await this.close();
 
         const childProcess = this.childProcess =
             fork(this.options.forkModulePath, this.options.forkArgs, this.options.forkOptions);
@@ -44,18 +44,22 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         )
     }
 
-    async close(killInstance?: boolean) {
+    private async _close(kill?: boolean) {
         const { childProcess, icpBus } = this;
         if (!childProcess || !icpBus) return;
         await this.setState('status',
-            killInstance ?
+            kill ?
                 PoolInstanceStatus.killed :
                 PoolInstanceStatus.closed);
         this.childProcess = undefined;
         this.icpBus = undefined;
 
         icpBus.close()
-        await this.killProcess(childProcess, icpBus);
+        await this._killProcess(childProcess, icpBus);
+    }
+
+    async close() {
+        return this._close(false);
     }
 
     async restart() {
@@ -63,7 +67,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
     }
 
     async kill() {
-        await this.close(true);
+        return this._close(true);
     }
 
     /**
@@ -71,7 +75,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
      * @returns Error if happened
      * @internal
      */
-    async killProcessByKill(
+    private async _killProcessByKill(
         childProcess: ChildProcess,
         icpBus: ProcessIpcBus,
         killSignal?: NodeJS.Signals | number
@@ -92,7 +96,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
      * @returns Error if happened
      * @internal
      */
-    async killProcessByTreeKill(
+    private async _killProcessByTreeKill(
         childProcess: ChildProcess,
         icpBus: ProcessIpcBus,
         pid: number,
@@ -103,13 +107,13 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
 
         // for some reason root process will stay alive without any error so lets kill by default method
         if (!error && childProcess.exitCode === null) {
-            error = await this.killProcessByKill(childProcess, icpBus, killSignal)
+            error = await this._killProcessByKill(childProcess, icpBus, killSignal)
         }
 
         return error;
     }
 
-    async killProcess(childProcess: ChildProcess, icpBus: ProcessIpcBus) {
+    private async _killProcess(childProcess: ChildProcess, icpBus: ProcessIpcBus) {
         const pid = childProcess.pid
         if (!pid) return;
 
@@ -117,9 +121,9 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
         let error: Error | undefined;
 
         if (killMode === 'kill') {
-            error = await this.killProcessByKill(childProcess, icpBus, killSignal)
+            error = await this._killProcessByKill(childProcess, icpBus, killSignal)
         } else if (killMode === 'treeKill') {
-            error = await this.killProcessByTreeKill(childProcess, icpBus, pid, killSignal)
+            error = await this._killProcessByTreeKill(childProcess, icpBus, pid, killSignal)
         } else {
             error = new Error(`Unknown kill mode: ${killMode}`);
         }
