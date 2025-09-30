@@ -16,6 +16,7 @@ export const collectGaugeData = <T>(
     if (!labelsMemo) {
         labelsMemo = new Map<string, Labels>();
         gaugeListMemo.set(gauge, labelsMemo);
+        gauge.set({}, 0);
     }
 
     for (const label of labelsMemo.values()) {
