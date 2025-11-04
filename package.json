@@ -1,6 +1,6 @@
 {
   "name": "pool-manager",
-  "version": "6.0.7",
+  "version": "6.0.8",
   "description": "",
   "typings": "dist/index.d.ts",
   "main": "dist/index.js",
@@ -25,10 +25,10 @@
   },
   "homepage": "https://github.com/utyfua/pool-manager-ts#readme",
   "dependencies": {
-    "ipc-bus-promise": "^0.0.1"
+    "ipc-bus-promise": ">=0.0.1 <0.1.0"
   },
   "peerDependencies": {
-    "ipc-bus-promise": "^0.0.1",
+    "ipc-bus-promise": ">=0.0.1 <0.1.0",
     "prom-client": "*",
     "tree-kill": "*"
   },
