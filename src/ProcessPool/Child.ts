@@ -16,12 +16,18 @@ export class ProcessPoolChildInstance<PoolInstanceState extends PoolInstanceBase
             return state;
         })
     }
-    async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]) {
-        if (key === 'error') {
-            this._latestError = value;
-            value = wrapInputAsResultOrError({ error: value }) as any;
+    async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]): Promise<void>;
+    async setState(state: Partial<PoolInstanceState>): Promise<void>;
+    async setState<T extends keyof PoolInstanceState>(keyOrState: T | Partial<PoolInstanceState>, value?: PoolInstanceState[T]): Promise<void> {
+        const state: Partial<PoolInstanceState> = (typeof keyOrState === 'object' && keyOrState !== null) ?
+            keyOrState :
+            { [keyOrState]: value } as Partial<PoolInstanceState>;
+
+        if ('error' in state) {
+            this._latestError = state.error;
+            state.error = wrapInputAsResultOrError({ error: state.error }) as any;
         }
-        await this.ipcBus.request({ action: 'setState', key, value })
+        await this.ipcBus.request({ action: 'setState', state })
     }
 
     constructor({ executeTask }: { executeTask?: (task: PoolTaskMini) => any } = {}) {

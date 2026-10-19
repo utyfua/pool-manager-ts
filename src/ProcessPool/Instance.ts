@@ -3,11 +3,11 @@ import { ChildProcess, fork } from 'node:child_process'
 import { PoolInstance, PoolInstanceBaseState, PoolInstanceDefaultState, PoolInstanceStatus, PoolTaskMini } from "../Pool";
 import { ProcessPoolInstanceOptions } from './types';
 
-export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance {
+export class ProcessPoolInstance<State extends PoolInstanceBaseState = PoolInstanceDefaultState> extends PoolInstance {
     childProcess?: ChildProcess;
     ipcBus?: ProcessIpcBus;
-    options: ProcessPoolInstanceOptions<PoolInstanceState>;
-    constructor(options: Partial<ProcessPoolInstanceOptions<PoolInstanceState>> & Pick<ProcessPoolInstanceOptions<PoolInstanceState>, 'forkModulePath'>) {
+    options: ProcessPoolInstanceOptions<State>;
+    constructor(options: Partial<ProcessPoolInstanceOptions<State>> & Pick<ProcessPoolInstanceOptions<State>, 'forkModulePath'>) {
         super(options);
         this.options = Object.assign({
             killMode: 'kill',
@@ -17,6 +17,7 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
 
     async start() {
         await this.close();
+        if (this.isKilled) throw new Error('Pool instance was killed');
 
         const childProcess = this.childProcess =
             fork(this.options.forkModulePath, this.options.forkArgs, this.options.forkOptions);
@@ -28,10 +29,10 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
                     return this.getState()
                 }
                 if (message.action === 'setState') {
-                    if (message.key === 'error') {
-                        message.value = unwrapResultOrError(message.value, { doNotThrow: true })
+                    if (message.state && 'error' in message.state) {
+                        message.state.error = unwrapResultOrError(message.state.error, { doNotThrow: true })
                     }
-                    return this.setState(message.key, message.value)
+                    return this.setState(message.state)
                 }
                 return this.userRpcMessageHandler(message)
             },
@@ -46,7 +47,11 @@ export class ProcessPoolInstance<PoolInstanceState extends PoolInstanceBaseState
 
     private async _close(kill?: boolean) {
         const { childProcess, ipcBus } = this;
-        if (!childProcess || !ipcBus) return;
+        if (!childProcess || !ipcBus) {
+            // no process yet (queued start or mid-restart), kill() still has to take effect
+            if (kill) await this.setState('status', PoolInstanceStatus.killed);
+            return;
+        }
         await this.setState('status',
             kill ?
                 PoolInstanceStatus.killed :

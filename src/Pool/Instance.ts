@@ -4,6 +4,7 @@ import { retryUponError } from "../retryUponError";
 import type { PoolManager } from "./Manager";
 import {
     PoolInstanceBaseState, PoolInstanceDefaultState,
+    PoolInstanceEventMap,
     PoolInstanceOptions, PoolInstanceStatus,
     PoolTaskMini
 } from "./types";
@@ -12,9 +13,9 @@ type ErrorType = Error | any;
 
 let aiForInstanceName = 0;
 
-export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = PoolInstanceDefaultState> extends EventEmitter {
+export class PoolInstance<State extends PoolInstanceBaseState = PoolInstanceDefaultState> extends EventEmitter<PoolInstanceEventMap> {
     manager?: PoolManager;
-    constructor(options: PoolInstanceOptions<PoolInstanceState> = {}) {
+    constructor(options: PoolInstanceOptions<State> = {}) {
         super();
         this.manager = options.manager;
         if (options.userState)
@@ -23,13 +24,13 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
     }
 
     /** @internal */
-    __state: PoolInstanceState = {
+    __state: State = {
         instanceName: `PoolInstance-${aiForInstanceName++}`,
         status: PoolInstanceStatus.initStarting,
-    } as PoolInstanceState;
-    getState(): Promise<PoolInstanceState>;
-    getState(options: { sync: true }): PoolInstanceState;
-    getState(options: { sync?: boolean } = {}): PoolInstanceState | Promise<PoolInstanceState> {
+    } as State;
+    getState(): Promise<State>;
+    getState(options: { sync: true }): State;
+    getState(options: { sync?: boolean } = {}): State | Promise<State> {
         if (options.sync)
             return this.__state;
         return Promise.resolve(this.__state)
@@ -37,25 +38,34 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
     getStateSync() {
         return this.getState({ sync: true })
     }
-    async setState<T extends keyof PoolInstanceState>(key: T, value: PoolInstanceState[T]): Promise<void>
-    async setState<T extends keyof PoolInstanceBaseState>(key: T, value: PoolInstanceBaseState[T]): Promise<void>
-    async setState<T extends keyof PoolInstanceBaseState>(key: T, value: PoolInstanceBaseState[T]): Promise<void> {
-        if ('error' === key) {
-            this.__state.error = value
-            await this.setState('status', (await this.getState()).status.includes('init') ?
-                PoolInstanceStatus.initFailed :
-                PoolInstanceStatus.failed)
-        } else if ('status' === key) {
-            const oldStatus = this.__state.status;
-            this.__state.status = value
-            this._onChangeStateStatus(oldStatus, value)
-        } else {
-            this.__state[key] = value
+    async setState<T extends keyof State>(key: T, value: State[T]): Promise<void>;
+    async setState(state: Partial<State>): Promise<void>;
+    async setState<T extends keyof State>(keyOrState: T | Partial<State>, value?: State[T]): Promise<void> {
+        const state: Partial<State> = (typeof keyOrState === 'object' && keyOrState !== null) ?
+            keyOrState :
+            { [keyOrState]: value } as Partial<State>;
+
+        for (const key of Object.keys(state) as T[]) {
+            const value = state[key] as State[T];
+            if ('error' === key) {
+                this.__state.error = value
+                await this.setState('status', this.__state.status.includes('init') ?
+                    PoolInstanceStatus.initFailed :
+                    PoolInstanceStatus.failed)
+            } else if ('status' === key) {
+                const oldStatus = this.__state.status;
+                if (oldStatus === PoolInstanceStatus.killed) return;
+                this.__state.status = value as PoolInstanceStatus
+                this._onChangeStateStatus(oldStatus, value as PoolInstanceStatus)
+            } else {
+                this.__state[key] = value as State[T]
+            }
         }
     }
     private _onChangeStateStatus(oldStatus: PoolInstanceStatus, status: PoolInstanceStatus) {
         if (oldStatus === status) return;
         this.emit('status', status)
+        this.manager?.emit('poolStatusChange', this, status)
 
         if (this.__state.error && ![PoolInstanceStatus.failed, PoolInstanceStatus.initFailed].includes(status)) {
             this.__state.error = undefined
@@ -107,15 +117,44 @@ export class PoolInstance<PoolInstanceState extends PoolInstanceBaseState = Pool
      * 
      * @internal
      */
+    async _waitInitStartingQueue() {
+        const manager = this.manager;
+        if (!manager) throw new Error('Manager is not available');
+        if (manager.inInitStarting < manager.options.maxPoolInitSize) return;
+        await this.setState('status', PoolInstanceStatus.initQueue);
+        await new Promise<void>((resolve, reject) => {
+            const listener = (pool: PoolInstance, status: PoolInstanceStatus) => {
+                if (manager.inInitStarting < manager.options.maxPoolInitSize) {
+                    manager.off('poolStatusChange', listener);
+                    resolve();
+                }
+            };
+            manager.on('poolStatusChange', listener);
+        })
+    }
+    /**
+     * 
+     * @internal
+     */
     async _start() {
+        if (this.isKilled) return;
         try {
+            await this._waitInitStartingQueue();
+
             await this.setState('status', PoolInstanceStatus.initStarting);
+            const attempts = this.manager?.options.poolInitAttempts ?? 3;
             await retryUponError({
                 func: () => this.start(),
-                attempts: this.manager?.options.poolInitAttempts,
+                retryStrategy: (attempt) => !this.isKilled && attempt < attempts,
             });
+            if (this.isKilled) {
+                // kill() arrived while start() was in progress, release what start() acquired
+                await this.kill();
+                return;
+            }
             await this.setState('status', PoolInstanceStatus.free);
         } catch (error) {
+            if (this.isKilled) return;
             await this.setState('error', error);
             this.manager?.options.poolInitOnError(error, this)
         }

@@ -1,13 +1,13 @@
 import EventEmitter from 'events';
 import { retryUponError } from '../retryUponError';
-import { PoolTaskResult, PoolTaskOptions, PoolTaskState, BaseTaskManager } from './types';
+import { PoolTaskResult, PoolTaskOptions, PoolTaskState, BaseTaskManager, PoolTaskEventMap } from './types';
 import type { PoolInstance } from './Instance'
 import { removeFromArray } from '../removeFromArray';
 
 export class PoolTask<
     Result = any,
     Manager extends BaseTaskManager = BaseTaskManager
-> extends EventEmitter {
+> extends EventEmitter<PoolTaskEventMap<Result>> {
     pool?: PoolInstance;
     isPoolSpecified?: boolean;
     generalAttempts?: number;

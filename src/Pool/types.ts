@@ -21,6 +21,7 @@ export const defaultDistributeTasks: IDistributePoolTasks = (pools: PoolInstance
 
 export interface PoolManagerOptions {
     poolInitQueueSize: number;
+    maxPoolInitSize: number;
     poolInitAttempts: number;
     poolInitOnError: (error: Error | unknown, pool: PoolInstance) => void;
     distributeTasks: IDistributePoolTasks;
@@ -31,6 +32,7 @@ export interface PoolManagerOptions {
 
 export const DefaultPoolManagerOptions: PoolManagerOptions = {
     distributeTasks: defaultDistributeTasks,
+    maxPoolInitSize: Infinity,
     poolInitQueueSize: 1,
     poolInitAttempts: 1,
     poolInitOnError: (error, pool) => console.error(error),
@@ -44,6 +46,14 @@ export interface BaseTaskManager extends EventEmitter {
     runningTasks: PoolTask[];
     distributeQueuedTasks(): void
     freePools?: PoolInstance[];
+}
+
+export interface PoolManagerEventMap {
+    poolStatusChange: [pool: PoolInstance, status: PoolInstanceStatus];
+    freePool: [pool: PoolInstance];
+    taskInit: [task: PoolTask];
+    taskResult: [task: PoolTask, result: PoolTaskResult];
+    taskExecute: [task: PoolTask, pool: PoolInstance];
 }
 
 export enum PoolTaskState {
@@ -61,6 +71,11 @@ export interface PoolTaskOptions {
     generalAttempts?: number,
 }
 
+export interface PoolTaskEventMap<Result> {
+    execute: [task: PoolTask<Result>, pool: PoolInstance];
+    result: [result: PoolTaskResult<Result>];
+}
+
 export type PoolInstanceBaseState = {
     instanceName: string;
     status: PoolInstanceStatus,
@@ -73,14 +88,20 @@ export interface PoolInstanceOptions<PoolInstanceState> {
 }
 
 export enum PoolInstanceStatus {
-    'initQueue' = 'initQueue',
-    'initStarting' = 'initStarting',
-    'initFailed' = 'initFailed',
-    'free' = 'free',
-    'running' = 'running',
-    'failed' = 'failed',
-    'killed' = 'killed',
-    'closed' = 'closed',
+    initQueue = 'initQueue',
+    initStarting = 'initStarting',
+    initFailed = 'initFailed',
+    free = 'free',
+    running = 'running',
+    failed = 'failed',
+    killed = 'killed',
+    closed = 'closed',
+}
+
+export interface PoolInstanceEventMap {
+    status: [status: PoolInstanceStatus];
+    free: [];
+    result: [result: PoolTaskResult];
 }
 
 export interface PoolTaskMini {

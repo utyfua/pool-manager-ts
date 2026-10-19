@@ -1,11 +1,11 @@
 import EventEmitter from 'events'
 
 import { parallelPromiseArrayLoop } from '../parallelPromiseArrayLoop'
-import { PoolManagerOptions, DefaultPoolManagerOptions, PoolTaskOptions } from './types';
+import { PoolManagerOptions, DefaultPoolManagerOptions, PoolTaskOptions, PoolInstanceStatus, PoolManagerEventMap } from './types';
 import { PoolTask } from './Task';
 import { PoolInstance } from './Instance'
 
-export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance> extends EventEmitter {
+export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance> extends EventEmitter<PoolManagerEventMap> {
     options: PoolManagerOptions;
     queueTasks: PoolTask[] = [];
     runningTasks: PoolTask[] = [];
@@ -15,6 +15,14 @@ export class PoolManager<PoolInstanceGeneric extends PoolInstance = PoolInstance
     constructor(options: Partial<PoolManagerOptions> = {}) {
         super();
         this.options = Object.assign({}, DefaultPoolManagerOptions, options)
+        if (this.options.maxPoolInitSize < this.options.poolInitQueueSize)
+            throw new Error('maxPoolInitSize cannot be less than poolInitQueueSize');
+    }
+
+    get inInitStarting() {
+        return this.poolList
+            .filter(pool => pool.__state.status === PoolInstanceStatus.initStarting)
+            .length
     }
 
     async startPools(options: { pools: PoolInstanceGeneric[] }) {
